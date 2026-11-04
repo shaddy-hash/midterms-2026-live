@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Truth Social relay</title>
+<style>
+body{font:15px/1.5 system-ui,-apple-system,sans-serif;margin:24px;color:#0f1720;background:#f6f7f9}
+@media (prefers-color-scheme: dark){body{color:#eef1f5;background:#0e1116}}
+#log{font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;margin-top:12px;opacity:.8}
+</style>
+</head>
+<body>
+<h1 style="font-size:18px">Truth Social relay</h1>
+<p>Keep this tab and the Truth Social tab open. Every couple of minutes the Truth Social tab sends Trump's latest posts here, and this page saves them to the site's data. Nothing is stored in this page.</p>
+<div id="log">Waiting for posts…</div>
+<script>
+(function () {
+  var REPO = "shaddy-hash/midterms-2026-live";
+  var log = document.getElementById("log");
+  function note(s) { log.textContent = new Date().toLocaleTimeString() + "  " + s + "\n" + log.textContent.split("\n").slice(0, 30).join("\n"); }
+  window.addEventListener("message", async function (e) {
+    if (e.origin !== "https://truthsocial.com" || !e.data || e.data.type !== "truth-posts") return;
+    var tok = e.data.token, body = e.data.body;
+    if (!tok || !body || !Array.isArray(body.posts)) return;
+    var url = "https://api.github.com/repos/" + REPO + "/contents/truth.json";
+    var H = { Authorization: "Bearer " + tok, Accept: "application/vnd.github+json", "Content-Type": "application/json" };
+    try {
+      var sha;
+      var g = await fetch(url + "?ref=data", { headers: H, cache: "no-store" });
+      if (g.ok) sha = (await g.json()).sha;
+      var content = btoa(unescape(encodeURIComponent(JSON.stringify(body))));
+      var p = await fetch(url, { method: "PUT", headers: H, body: JSON.stringify({ message: "truth relay " + body.updated.slice(11, 19), content: content, sha: sha, branch: "data" }) });
+      note("saved " + body.posts.length + " posts (HTTP " + p.status + ")");
+      e.source.postMessage({ type: "truth-ack", status: p.status }, e.origin);
+    } catch (err) { note("error: " + err); }
+  });
+})();
+</script>
+</body>
+</html>
