@@ -120,7 +120,7 @@
     const holdParty = p.hold.toLowerCase();
     const flip = winner && (status === "called" || status === "proj") && ((holdParty === "r" && winner !== "r") || (holdParty !== "r" && winner === "r"));
     const leanFlip = winner && ((holdParty === "r" && winner !== "r") || (holdParty !== "r" && winner === "r"));
-    return { ev, r, chal, cP, rP, status, winner, flip, leanFlip, cName: chal ? chal.name : p.d, rName: r ? r.name : p.r };
+    return { ev, r, chal, cP, rP, status, winner, flip, leanFlip, cName: chal && !/party/i.test(chal.name || "") ? chal.name : p.d, rName: r && !/party/i.test(r.name || "") ? r.name : p.r };
   }
 
   function badge(s, p) {

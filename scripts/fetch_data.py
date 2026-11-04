@@ -18,7 +18,7 @@ SENATE_EVENTS = {
     "TX": "SENATETX-26", "MI": "SENATEMI-26", "ME": "SENATEME-26", "IA": "SENATEIA-26",
     "OH": "SENATEOHS-26", "KS": "SENATEKS-26", "NE": "SENATENE-26", "SC": "SENATESC-26",
     "AK": "SENATEAK-26", "NC": "SENATENC-26", "NH": "SENATENH-26", "GA": "SENATEGA-26",
-    "FL": "SENATEFL-26", "MN": "SENATEMN-26",
+    "FL": ["SENATEFL-26", "SENATEFLS-26"], "MN": "SENATEMN-26",
 }
 CONTROL_EVENTS = {"senate": "CONTROLS-2026", "house": "CONTROLH-2026", "combo": "KXBALANCEPOWERCOMBO-27FEB"}
 
@@ -110,7 +110,12 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     control = {k: fetch_event(t) for k, t in CONTROL_EVENTS.items()}
-    senate = {st: fetch_event(t) for st, t in SENATE_EVENTS.items()}
+    senate = {}
+    for st, t in SENATE_EVENTS.items():
+        for tk in (t if isinstance(t, list) else [t]):
+            senate[st] = fetch_event(tk)
+            if senate[st]:
+                break
     data = {"updated": now, "control": control, "senate": senate, "headlines": headlines()}
 
     with open(os.path.join(OUT_DIR, "data.json"), "w") as fh:
