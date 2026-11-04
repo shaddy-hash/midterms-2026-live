@@ -70,7 +70,7 @@ POLLCHECK_HOUSE = "https://www.pollcheck.co.uk/us-midterms-2026/data/house_map.j
 UA = "Mozilla/5.0 (compatible; midterms-2026-live-dashboard/1.1; +https://github.com/shaddy-hash/midterms-2026-live)"
 
 
-def get(url, as_json=True, tries=2, timeout=20):
+def get(url, as_json=True, tries=4, timeout=20):
     for i in range(tries):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json" if as_json else "*/*"})
@@ -81,7 +81,7 @@ def get(url, as_json=True, tries=2, timeout=20):
             if i == tries - 1:
                 print(f"WARN {url[:90]}: {e}", file=sys.stderr)
                 return None
-            time.sleep(1.0)
+            time.sleep(1.5 * (i + 1))
 
 
 def pct(x):
@@ -319,7 +319,7 @@ def main():
     jobs = {f"c:{k}": v for k, v in CONTROL_EVENTS.items()}
     jobs.update({f"s:{k}": v for k, v in SEAT_EVENTS.items()})
     jobs.update({f"r:{st}": SPECIAL.get(st, f"SENATE{st}-26") for st in SENATE_STATES})
-    with ThreadPoolExecutor(max_workers=12) as ex:
+    with ThreadPoolExecutor(max_workers=6) as ex:
         futs = {k: ex.submit(fetch_event, v) for k, v in jobs.items()}
         futs.update({f"g:{st}": ex.submit(fetch_series_event, f"GOVPARTY{st}") for st in GOV_STATES})
         f_head = ex.submit(headlines)
