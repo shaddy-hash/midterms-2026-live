@@ -94,7 +94,14 @@ def pct(x):
 
 def market_view(m):
     bid, ask, last = pct(m.get("yes_bid_dollars")), pct(m.get("yes_ask_dollars")), pct(m.get("last_price_dollars"))
-    mid = round((bid + ask) / 2, 1) if bid is not None and ask is not None and ask > 0 else last
+    result = (m.get("result") or "").lower()
+    if result in ("yes", "no"):
+        # Settled market: the order book is emptied (bid 0 / ask 100), so a midpoint would read 50%. Use the outcome.
+        mid = 100.0 if result == "yes" else 0.0
+    elif m.get("status") not in (None, "active", "open") or (bid is not None and ask is not None and ask - bid >= 40):
+        mid = last  # closed or empty book: last trade is the best signal
+    else:
+        mid = round((bid + ask) / 2, 1) if bid is not None and ask is not None and ask > 0 else last
     return {"ticker": m.get("ticker"), "name": m.get("yes_sub_title") or m.get("title"), "price": mid,
             "last": last, "prev": pct(m.get("previous_price_dollars")), "status": m.get("status"),
             "result": m.get("result") or "", "floor": m.get("floor_strike"), "cap": m.get("cap_strike"),
