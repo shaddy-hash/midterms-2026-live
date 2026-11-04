@@ -10,7 +10,7 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const pct = (v) => (v == null || isNaN(v) ? "—" : `${Math.round(v)}%`);
   const sign = (v) => (v > 0 ? "+" : v < 0 ? "−" : "±") + Math.abs(Math.round(v));
-  let PRED = null, DATA = null, HIST = [], filter = "key";
+  let PRED = null, DATA = null, HIST = [], filter = "key", govFilter = "key";
 
   async function getJSON(url) {
     const r = await fetch(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now(), { cache: "no-store" });
@@ -105,15 +105,16 @@
 
   // ---------- races ----------
   const lastName = (n) => String(n || "").trim().split(/\s+/).pop().toLowerCase();
-  function raceState(p) {
-    const ev = DATA && DATA.senate && DATA.senate[p.st];
+  function raceState(p, kind) {
+    const gov = kind === "gov";
+    const ev = DATA && DATA[gov ? "governors" : "senate"] && DATA[gov ? "governors" : "senate"][p.st];
     const ms = ((ev && ev.markets) || []).filter((m) => m.price != null);
     const r = ms.find((m) => /-R$/.test(m.ticker || ""));
     const chal = ms.filter((m) => m !== r).sort((a, b) => (b.price ?? 0) - (a.price ?? 0))[0];
     const chalParty = chal ? (/-D$/.test(chal.ticker || "") ? "d" : "i") : (p.chal === "I" ? "i" : "d");
     const won = ms.find((m) => m.result === "yes");
     const cP = chal ? chal.price : null, rP = r ? r.price : null;
-    const sm = DATA && DATA.raceSummary && DATA.raceSummary[p.st];
+    const sm = DATA && DATA[gov ? "govSummary" : "raceSummary"] && DATA[gov ? "govSummary" : "raceSummary"][p.st];
     const closed = sm ? sm.closed !== false : true;
     let status = "none", winner = null, winM = null;
     if (won) { status = "called"; winM = won; winner = won === r ? "r" : chalParty; }
@@ -133,12 +134,13 @@
     const lean = p.trump24 ?? 0; // + = Republican-leaning (Trump 2024 margin)
     const againstLean = decided && ((lean >= 0 && winner !== "r") || (lean < 0 && winner === "r"));
     const leanSize = Math.abs(lean);
-    const preFav = p.kalshi != null ? (p.kalshi >= 50 ? chalParty : "r") : p.poll != null ? (p.poll >= 0 ? chalParty : "r") : (lean >= 0 ? "r" : chalParty);
+    const preFav = p.kalshi != null ? (p.kalshi >= 50 ? chalParty : "r") : p.poll != null ? (p.poll >= 0 ? chalParty : "r") : gov ? null : (lean >= 0 ? "r" : chalParty);
     const beatFav = decided && preFav && winner !== preFav;
     const incLost = decided && incSide && winner !== incSide;
     let upset = null;
-    if (decided && againstLean && leanSize >= 10) upset = "major";
-    else if (decided && (beatFav || incLost)) upset = "upset";
+    // Major upset: the seat flips to the party that lost the state by 10+ points in 2024.
+    if (decided && flip && againstLean && leanSize >= 10) upset = "major";
+    else if (decided && (beatFav || incLost || (flip && againstLean && leanSize >= 5))) upset = "upset";
     return { ev, r, chal, cP, rP, status, winner, winM, decided, flip, upset, incLost, incSide, cName, rName, chalParty,
       leanFlip: flipsSeat(winner), lean };
   }
@@ -155,17 +157,23 @@
 
   const leanText = (v) => (v == null ? "" : v >= 0 ? `Trump +${Math.round(v)}` : `Harris +${Math.round(-v)}`);
 
-  function renderRaces() {
-    const list = $("#races");
-    let races = PRED.races.map((p) => ({ p, s: raceState(p) }));
+  function renderRaces(kind) {
+    const gov = kind === "gov";
+    const list = $(gov ? "#govs" : "#races");
+    const all = gov ? PRED.governors || [] : PRED.races;
+    const filter = gov ? govFilter : window.__senFilter || "key";
+    const pin = gov ? ["KS", "NE"] : [];
+    let races = all.map((p) => ({ p, s: raceState(p, kind) }));
     const n = { key: 0, called: 0, upsets: 0, flips: 0 };
     races.forEach((x) => { if (x.p.key) n.key++; if (x.s.decided) n.called++; if (x.s.upset) n.upsets++; if (x.s.leanFlip) n.flips++; });
-    document.querySelectorAll(".chip").forEach((c) => { const k = c.dataset.f; if (n[k] != null) c.dataset.count = n[k]; c.textContent = c.dataset.label + (n[k] != null ? ` · ${n[k]}` : " · 35"); });
+    document.querySelectorAll((gov ? "#gov-chips" : "#race-chips") + " .chip").forEach((c) => { const k = c.dataset.f; c.textContent = c.dataset.label + (n[k] != null ? ` · ${n[k]}` : ` · ${all.length}`); });
     if (filter === "key") races = races.filter((x) => x.p.key || x.s.upset);
     if (filter === "called") races = races.filter((x) => x.s.decided);
     if (filter === "upsets") races = races.filter((x) => x.s.upset);
     if (filter === "flips") races = races.filter((x) => x.s.leanFlip);
     races.sort((a, b) => {
+      const pa = pin.indexOf(a.p.st), pb = pin.indexOf(b.p.st);
+      if (pa !== pb) return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
       const rank = (x) => (x.s.upset === "major" ? 0 : x.s.upset ? 1 : x.s.status === "called" ? 2 : x.s.status === "proj" ? 3 : 4);
       return rank(a) - rank(b) || Math.abs((a.s.cP ?? 50) - 50) - Math.abs((b.s.cP ?? 50) - 50);
     });
@@ -180,7 +188,7 @@
       const lost = (side) => (s.incLost && s.incSide === side ? " lost" : "");
       const upsetTag = s.upset === "major" ? `<div class="upset-tag">⚡ Major upset · ${s.winner === "r" ? "R" : chalLabel} wins a ${leanText(s.lean)} state</div>`
         : s.upset ? `<div class="upset-tag">⚡ Upset${s.incLost ? " · incumbent defeated" : ""}</div>` : "";
-      return `<article class="card race${s.upset ? " is-upset" : ""}${s.upset === "major" ? " is-major" : ""}" aria-label="${esc(p.name)} Senate race">
+      return `<article class="card race${s.upset ? " is-upset" : ""}${s.upset === "major" ? " is-major" : ""}" aria-label="${esc(p.name)} ${gov ? "governor" : "Senate"} race">
         ${upsetTag}
         <div class="race-top"><span class="race-name">${esc(p.name)} <span class="seat seat-${p.hold.toLowerCase()}">${p.hold}-held</span></span>${badge(s)}</div>
         <div class="cands"><span class="${lost(cls)}"><b style="color:var(--${cls === "i" ? "ind" : "dem"})">${esc(s.cName)}</b>${inc(cls)} (${chalLabel}) ${pct(s.cP)}</span>
@@ -289,7 +297,8 @@
     renderKPI("#kpi-senate", c.senate, PRED.control.senate, "Senate");
     renderCombo(c.combo);
     renderTrend();
-    renderRaces();
+    renderRaces("senate");
+    renderRaces("gov");
     renderTracker();
     renderTruth();
     renderNews();
@@ -321,10 +330,15 @@
     renderAll();
   }
 
-  document.querySelectorAll(".chip").forEach((b) => b.addEventListener("click", () => {
-    filter = b.dataset.f;
-    document.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-    renderRaces();
+  document.querySelectorAll("#gov-chips .chip").forEach((b) => b.addEventListener("click", () => {
+    govFilter = b.dataset.f;
+    document.querySelectorAll("#gov-chips .chip").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    renderRaces("gov");
+  }));
+  document.querySelectorAll("#race-chips .chip").forEach((b) => b.addEventListener("click", () => {
+    window.__senFilter = b.dataset.f;
+    document.querySelectorAll("#race-chips .chip").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    renderRaces("senate");
   }));
   $("#refresh").addEventListener("click", load);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });

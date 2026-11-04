@@ -463,5 +463,370 @@
  "senateNotUp": {
   "D": 34,
   "R": 31
- }
+ },
+ "governors": [
+  {
+   "st": "KS",
+   "name": "Kansas",
+   "hold": "D",
+   "inc": null,
+   "trump24": 16.1,
+   "closes": "9 PM ET",
+   "key": true,
+   "chal": "D",
+   "d": "Holscher",
+   "r": "Masterson",
+   "poll": -4.0
+  },
+  {
+   "st": "NE",
+   "name": "Nebraska",
+   "hold": "R",
+   "inc": "Jim Pillen",
+   "trump24": 20.5,
+   "closes": "9 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "AL",
+   "name": "Alabama",
+   "hold": "R",
+   "inc": null,
+   "trump24": 30.5,
+   "closes": "8 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "AK",
+   "name": "Alaska",
+   "hold": "R",
+   "inc": null,
+   "trump24": 13.1,
+   "closes": "1 AM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "AZ",
+   "name": "Arizona",
+   "hold": "D",
+   "inc": "Katie Hobbs",
+   "trump24": 5.5,
+   "closes": "9 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "AR",
+   "name": "Arkansas",
+   "hold": "R",
+   "inc": "Sarah Huckabee Sanders",
+   "trump24": 30.6,
+   "closes": "8:30 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "CA",
+   "name": "California",
+   "hold": "D",
+   "inc": null,
+   "trump24": -20.2,
+   "closes": "11 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "CO",
+   "name": "Colorado",
+   "hold": "D",
+   "inc": null,
+   "trump24": -11.0,
+   "closes": "9 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "CT",
+   "name": "Connecticut",
+   "hold": "D",
+   "inc": "Ned Lamont",
+   "trump24": -14.5,
+   "closes": "8 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "FL",
+   "name": "Florida",
+   "hold": "R",
+   "inc": null,
+   "trump24": 13.1,
+   "closes": "8 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "GA",
+   "name": "Georgia",
+   "hold": "R",
+   "inc": null,
+   "trump24": 2.2,
+   "closes": "7 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "HI",
+   "name": "Hawaii",
+   "hold": "D",
+   "inc": "Josh Green",
+   "trump24": -23.1,
+   "closes": "Midnight ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "ID",
+   "name": "Idaho",
+   "hold": "R",
+   "inc": "Brad Little",
+   "trump24": 36.5,
+   "closes": "11 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "IL",
+   "name": "Illinois",
+   "hold": "D",
+   "inc": "JB Pritzker",
+   "trump24": -10.9,
+   "closes": "8 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "IA",
+   "name": "Iowa",
+   "hold": "R",
+   "inc": null,
+   "trump24": 13.2,
+   "closes": "10 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "ME",
+   "name": "Maine",
+   "hold": "D",
+   "inc": null,
+   "trump24": -6.9,
+   "closes": "8 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "MD",
+   "name": "Maryland",
+   "hold": "D",
+   "inc": "Wes Moore",
+   "trump24": -28.5,
+   "closes": "8 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "MA",
+   "name": "Massachusetts",
+   "hold": "D",
+   "inc": "Maura Healey",
+   "trump24": -25.2,
+   "closes": "8 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "MI",
+   "name": "Michigan",
+   "hold": "D",
+   "inc": null,
+   "trump24": 1.4,
+   "closes": "9 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "MN",
+   "name": "Minnesota",
+   "hold": "D",
+   "inc": "Tim Walz",
+   "trump24": -4.2,
+   "closes": "9 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "NV",
+   "name": "Nevada",
+   "hold": "R",
+   "inc": "Joe Lombardo",
+   "trump24": 3.1,
+   "closes": "10 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "NH",
+   "name": "New Hampshire",
+   "hold": "R",
+   "inc": "Kelly Ayotte",
+   "trump24": -2.8,
+   "closes": "8 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "NM",
+   "name": "New Mexico",
+   "hold": "D",
+   "inc": null,
+   "trump24": -6.0,
+   "closes": "9 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "NY",
+   "name": "New York",
+   "hold": "D",
+   "inc": "Kathy Hochul",
+   "trump24": -12.6,
+   "closes": "9 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "OH",
+   "name": "Ohio",
+   "hold": "R",
+   "inc": null,
+   "trump24": 11.2,
+   "closes": "7:30 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "OK",
+   "name": "Oklahoma",
+   "hold": "R",
+   "inc": null,
+   "trump24": 34.3,
+   "closes": "8 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "OR",
+   "name": "Oregon",
+   "hold": "D",
+   "inc": "Tina Kotek",
+   "trump24": -14.3,
+   "closes": "11 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "PA",
+   "name": "Pennsylvania",
+   "hold": "D",
+   "inc": "Josh Shapiro",
+   "trump24": 1.7,
+   "closes": "8 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "RI",
+   "name": "Rhode Island",
+   "hold": "D",
+   "inc": "Dan McKee",
+   "trump24": -13.8,
+   "closes": "8 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "SC",
+   "name": "South Carolina",
+   "hold": "R",
+   "inc": null,
+   "trump24": 17.8,
+   "closes": "7 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "SD",
+   "name": "South Dakota",
+   "hold": "R",
+   "inc": "Larry Rhoden",
+   "trump24": 29.2,
+   "closes": "9 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "TN",
+   "name": "Tennessee",
+   "hold": "R",
+   "inc": null,
+   "trump24": 29.7,
+   "closes": "8 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "TX",
+   "name": "Texas",
+   "hold": "R",
+   "inc": "Greg Abbott",
+   "trump24": 13.7,
+   "closes": "9 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "VT",
+   "name": "Vermont",
+   "hold": "R",
+   "inc": "Phil Scott",
+   "trump24": -31.5,
+   "closes": "7 PM ET",
+   "key": false,
+   "chal": "D"
+  },
+  {
+   "st": "WI",
+   "name": "Wisconsin",
+   "hold": "D",
+   "inc": "Tony Evers",
+   "trump24": 0.9,
+   "closes": "9 PM ET",
+   "key": true,
+   "chal": "D"
+  },
+  {
+   "st": "WY",
+   "name": "Wyoming",
+   "hold": "R",
+   "inc": null,
+   "trump24": 45.8,
+   "closes": "9 PM ET",
+   "key": false,
+   "chal": "D"
+  }
+ ]
 }

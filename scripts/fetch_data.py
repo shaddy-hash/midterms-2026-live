@@ -32,7 +32,22 @@ NOT_UP = {"D": 34, "R": 31}
 CLOSE_ET = {"AL": 20, "AK": 25, "AR": 20.5, "CO": 21, "DE": 20, "GA": 19, "ID": 23, "IL": 20, "IA": 22, "KS": 22, "KY": 19,
             "LA": 21, "ME": 20, "MA": 20, "MI": 21, "MN": 21, "MS": 20, "MT": 22, "NE": 22, "NH": 20, "NJ": 20, "NM": 21,
             "NC": 19.5, "OK": 20, "OR": 23, "RI": 20, "SC": 19, "SD": 22, "TN": 20, "TX": 22, "VA": 19, "WV": 19.5,
-            "WY": 21, "OH": 19.5, "FL": 20}
+            "WY": 21, "OH": 19.5, "FL": 20,
+            "AZ": 21, "CA": 23, "CT": 20, "HI": 24, "MD": 20, "NV": 22, "NY": 21, "PA": 20, "VT": 19, "WI": 21}
+GOV_STATES = ["KS", "NE", "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "FL", "GA", "HI", "ID", "IL", "IA", "ME", "MD", "MA",
+              "MI", "MN", "NV", "NH", "NM", "NY", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "VT", "WI", "WY"]
+SERIES_API = "https://api.elections.kalshi.com/trade-api/v2/events?series_ticker={}&with_nested_markets=true"
+
+
+def fetch_series_event(series):
+    """Newest event in a series (governor tickers vary by year suffix)."""
+    j = get(SERIES_API.format(series))
+    evs = (j or {}).get("events") or []
+    if not evs:
+        return None
+    ev = sorted(evs, key=lambda e: e.get("event_ticker", ""))[-1]
+    return {"ticker": ev.get("event_ticker"), "title": ev.get("title"),
+            "markets": [market_view(m) for m in (ev.get("markets") or [])]}
 ELECTION_DAY_UTC = datetime(2026, 11, 4, 0, 0, tzinfo=timezone.utc)  # 7 PM ET Nov 3 = 00:00 UTC Nov 4
 
 
@@ -304,8 +319,9 @@ def main():
     jobs = {f"c:{k}": v for k, v in CONTROL_EVENTS.items()}
     jobs.update({f"s:{k}": v for k, v in SEAT_EVENTS.items()})
     jobs.update({f"r:{st}": SPECIAL.get(st, f"SENATE{st}-26") for st in SENATE_STATES})
-    with ThreadPoolExecutor(max_workers=10) as ex:
+    with ThreadPoolExecutor(max_workers=12) as ex:
         futs = {k: ex.submit(fetch_event, v) for k, v in jobs.items()}
+        futs.update({f"g:{st}": ex.submit(fetch_series_event, f"GOVPARTY{st}") for st in GOV_STATES})
         f_head = ex.submit(headlines)
         f_truth = ex.submit(truth_posts)
         f_house = ex.submit(house_calls)
@@ -315,6 +331,8 @@ def main():
     control = {k: res[f"c:{k}"] for k in CONTROL_EVENTS}
     senate = {st: res[f"r:{st}"] for st in SENATE_STATES}
     summaries = {st: race_summary(ev, polls_closed(st, now_dt)) for st, ev in senate.items()}
+    governors = {st: res[f"g:{st}"] for st in GOV_STATES}
+    gov_summary = {st: race_summary(ev, polls_closed(st, now_dt)) for st, ev in governors.items()}
 
     # Senate seats: called so far + market-expected total.
     s_called = {"D": 0, "R": 0, "I": 0}
@@ -340,6 +358,7 @@ def main():
     }
 
     data = {"updated": now, "control": control, "senate": senate, "raceSummary": summaries, "seats": seats,
+            "governors": governors, "govSummary": gov_summary,
             "headlines": heads, "truth": truth}
     with open(os.path.join(OUT_DIR, "data.json"), "w") as fh:
         json.dump(data, fh, separators=(",", ":"))
@@ -380,7 +399,7 @@ def main():
         tracker.append(row)
     json.dump(tracker[-400:], open(tr_path, "w"), separators=(",", ":"))
 
-    print(f"{now}: races={sum(1 for v in senate.values() if v)}/35 senateCalled={s_called} "
+    print(f"{now}: govs={sum(1 for v in governors.values() if v)}/36 races={sum(1 for v in senate.values() if v)}/35 senateCalled={s_called} "
           f"house={'ok' if hcalls else 'none'} truth={truth['source']}:{len(truth['posts'])} heads={len(heads)}")
 
 
