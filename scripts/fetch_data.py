@@ -27,7 +27,19 @@ SENATE_STATES = ["AL", "AK", "AR", "CO", "DE", "GA", "ID", "IL", "IA", "KS", "KY
                  "MS", "MT", "NE", "NH", "NJ", "NM", "NC", "OK", "OR", "RI", "SC", "SD", "TN", "TX", "VA", "WV",
                  "WY", "OH", "FL"]
 SPECIAL = {"OH": ["SENATEOHS-26", "SENATEOH-26"], "FL": ["SENATEFLS-26", "SENATEFL-26"]}
-NOT_UP = {"D": 34, "R": 31}  # seats not on the ballot (D count includes independents who caucus with Democrats)
+NOT_UP = {"D": 34, "R": 31}
+# Final poll closing time per state, hours ET on Nov 3 (25 = 1 AM Nov 4). Market-implied projections only count after this.
+CLOSE_ET = {"AL": 20, "AK": 25, "AR": 20.5, "CO": 21, "DE": 20, "GA": 19, "ID": 23, "IL": 20, "IA": 22, "KS": 22, "KY": 19,
+            "LA": 21, "ME": 20, "MA": 20, "MI": 21, "MN": 21, "MS": 20, "MT": 22, "NE": 22, "NH": 20, "NJ": 20, "NM": 21,
+            "NC": 19.5, "OK": 20, "OR": 23, "RI": 20, "SC": 19, "SD": 22, "TN": 20, "TX": 22, "VA": 19, "WV": 19.5,
+            "WY": 21, "OH": 19.5, "FL": 20}
+ELECTION_DAY_UTC = datetime(2026, 11, 4, 0, 0, tzinfo=timezone.utc)  # 7 PM ET Nov 3 = 00:00 UTC Nov 4
+
+
+def polls_closed(st, now_dt):
+    from datetime import timedelta
+    close_utc = ELECTION_DAY_UTC + timedelta(hours=CLOSE_ET.get(st, 25) - 19)
+    return now_dt >= close_utc  # seats not on the ballot (D count includes independents who caucus with Democrats)
 
 CONTROL_EVENTS = {"senate": "CONTROLS-2026", "house": "CONTROLH-2026", "combo": "KXBALANCEPOWERCOMBO-27FEB"}
 SEAT_EVENTS = {"house": "KXDHOUSESEATS-27", "senate": "KXDSENATESEATS-27"}
@@ -92,7 +104,7 @@ def party_of(m):
     return "I"
 
 
-def race_summary(ev):
+def race_summary(ev, closed=True):
     """Leader, call status and per-party chance for one race event."""
     if not ev or not ev["markets"]:
         return None
@@ -102,14 +114,14 @@ def race_summary(ev):
     status, winner = "open", None
     if won:
         status, winner = "called", party_of(won)
-    elif top and top["price"] >= 99:
+    elif closed and top and top["price"] >= 99:
         status, winner = "projected", party_of(top)
     by_party = {}
     for m in ms:
         p = party_of(m)
         by_party[p] = max(by_party.get(p, 0), m["price"])
     return {"status": status, "winner": winner, "winnerName": (won or top or {}).get("name") if winner else None,
-            "leader": party_of(top) if top else None, "chance": by_party}
+            "leader": party_of(top) if top else None, "chance": by_party, "closed": closed}
 
 
 def expected_seats(ev):
@@ -180,9 +192,26 @@ def is_own_words(text):
     return True
 
 
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://truthsocial.com/@realDonaldTrump", "Origin": "https://truthsocial.com"}
+
+
+def get_browser(url, as_json=True):
+    try:
+        req = urllib.request.Request(url, headers=BROWSER_HEADERS)
+        with urllib.request.urlopen(req, timeout=20) as r:
+            body = r.read()
+        return json.loads(body) if as_json else body
+    except Exception as e:  # noqa: BLE001
+        print(f"WARN truth {url[:60]}: {e}", file=sys.stderr)
+        return None
+
+
 def truth_posts():
     posts, source = [], None
-    j = get(TRUTH_API)
+    j = get_browser(TRUTH_API)
     if isinstance(j, list):
         source = "truthsocial.com"
         for s in j:
@@ -193,6 +222,23 @@ def truth_posts():
                 continue
             posts.append({"text": text, "url": s.get("url"), "time": s.get("created_at"),
                           "media": len(s.get("media_attachments") or [])})
+    if not posts:
+        raw = get_browser("https://truthsocial.com/@realDonaldTrump.rss", as_json=False)
+        try:
+            root = ET.fromstring(raw) if raw else None
+        except ET.ParseError:
+            root = None
+        if root is not None:
+            source = "truthsocial.com RSS"
+            for it in root.iter("item"):
+                text = clean_html(it.findtext("description") or "")
+                if not is_own_words(text):
+                    continue
+                try:
+                    ts = datetime.strptime(it.findtext("pubDate") or "", "%a, %d %b %Y %H:%M:%S %z").astimezone(timezone.utc).isoformat()
+                except ValueError:
+                    ts = None
+                posts.append({"text": text, "url": (it.findtext("link") or "").strip(), "time": ts, "media": 0})
     if not posts:
         raw = get(TRUTH_RSS, as_json=False)
         if raw:
@@ -253,7 +299,7 @@ def main():
 
     control = {k: res[f"c:{k}"] for k in CONTROL_EVENTS}
     senate = {st: res[f"r:{st}"] for st in SENATE_STATES}
-    summaries = {st: race_summary(ev) for st, ev in senate.items()}
+    summaries = {st: race_summary(ev, polls_closed(st, now_dt)) for st, ev in senate.items()}
 
     # Senate seats: called so far + market-expected total.
     s_called = {"D": 0, "R": 0, "I": 0}

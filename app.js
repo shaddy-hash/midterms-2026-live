@@ -113,10 +113,12 @@
     const chalParty = chal ? (/-D$/.test(chal.ticker || "") ? "d" : "i") : (p.chal === "I" ? "i" : "d");
     const won = ms.find((m) => m.result === "yes");
     const cP = chal ? chal.price : null, rP = r ? r.price : null;
+    const sm = DATA && DATA.raceSummary && DATA.raceSummary[p.st];
+    const closed = sm ? sm.closed !== false : true;
     let status = "none", winner = null, winM = null;
     if (won) { status = "called"; winM = won; winner = won === r ? "r" : chalParty; }
-    else if (cP != null && cP >= 99) { status = "proj"; winM = chal; winner = chalParty; }
-    else if (rP != null && rP >= 99) { status = "proj"; winM = r; winner = "r"; }
+    else if (closed && cP != null && cP >= 99) { status = "proj"; winM = chal; winner = chalParty; }
+    else if (closed && rP != null && rP >= 99) { status = "proj"; winM = r; winner = "r"; }
     else if (cP != null) { status = cP >= 35 && cP <= 65 ? "toss" : "lean"; winner = cP > 50 ? chalParty : "r"; }
     const decided = status === "called" || status === "proj";
     const hold = p.hold.toLowerCase();
@@ -265,7 +267,10 @@
         <div class="post-text">${esc(p.text).replace(/\n+/g, "<br>")}</div>
         <div class="m">${p.time ? timeAgo(p.time) + " · " + new Date(p.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""}${p.media ? " · has media" : ""}</div></a>`).join("")
       : '<div class="skeleton">No posts loaded yet.</div>';
-    $("#truth-src").textContent = t.source ? `Source: ${t.source}. Original posts only; re-posts and media-only posts are hidden.` : "";
+    const newest = posts[0] && posts[0].time ? (Date.now() - new Date(posts[0].time).getTime()) / 3600000 : null;
+    const stale = t.source && /archive/.test(t.source) && newest != null && newest > 2
+      ? ` The archive lags Truth Social (newest post ${Math.round(newest)} hr old); open <a href="https://truthsocial.com/@realDonaldTrump" target="_blank" rel="noopener noreferrer">@realDonaldTrump</a> for the latest.` : "";
+    $("#truth-src").innerHTML = t.source ? `Source: ${esc(t.source)}. Original posts only; re-posts and media-only posts are hidden.${stale}` : "";
   }
 
   // ---------- headlines ----------
