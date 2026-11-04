@@ -464,6 +464,122 @@ def house_events():
     return out
 
 
+# ---------- Polymarket per-race markets ----------
+GAMMA = "https://gamma-api.polymarket.com/events"
+STATE_ABBR = {"alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR", "california": "CA", "colorado": "CO",
+              "connecticut": "CT", "delaware": "DE", "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+              "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS", "kentucky": "KY", "louisiana": "LA",
+              "maine": "ME", "maryland": "MD", "massachusetts": "MA", "michigan": "MI", "minnesota": "MN",
+              "mississippi": "MS", "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+              "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY", "north carolina": "NC",
+              "north dakota": "ND", "ohio": "OH", "oklahoma": "OK", "oregon": "OR", "pennsylvania": "PA",
+              "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", "tennessee": "TN", "texas": "TX",
+              "utah": "UT", "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
+              "wisconsin": "WI", "wyoming": "WY"}
+
+
+def poly_index():
+    """Map race keys (senate:TX, gov:AZ, house:NE02) to Polymarket event slugs. Cached for an hour."""
+    cache = os.path.join(OUT_DIR, "poly_index.json")
+    try:
+        idx = json.load(open(cache))
+        if (time.time() - os.path.getmtime(cache)) < 3600 and idx:
+            return idx
+    except (OSError, ValueError):
+        idx = {}
+    found = {}
+    for off in range(0, 1500, 100):
+        j = get(f"{GAMMA}?tag_slug=midterms&closed=false&limit=100&offset={off}")
+        if not isinstance(j, list) or not j:
+            break
+        for e in j:
+            slug, title = e.get("slug", ""), (e.get("title") or "").lower()
+            m = re.match(r"^([a-z]{2})-(\d{2}|al)-house-election-winner", slug)
+            if m:
+                found[f"house:{m.group(1).upper()}{m.group(2).upper()}"] = slug
+                continue
+            for name, ab in STATE_ABBR.items():
+                if title.startswith(name + " "):
+                    if "senate" in title and "winner" in title:
+                        found.setdefault(f"senate:{ab}", slug)
+                    elif "governor" in title and "winner" in title:
+                        found.setdefault(f"gov:{ab}", slug)
+                    break
+        if len(j) < 100:
+            break
+    if found:
+        idx = {**idx, **found}
+        json.dump(idx, open(cache, "w"))
+    return idx
+
+
+def poly_races():
+    idx = poly_index()
+    if not idx:
+        return {}
+    by_slug = {v: k for k, v in idx.items()}
+    slugs = list(by_slug)
+    out = {}
+
+    def batch(chunk):
+        return get(GAMMA + "?" + "&".join(f"slug={x}" for x in chunk)) or []
+
+    chunks = [slugs[i:i + 20] for i in range(0, len(slugs), 20)]
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        for evs in ex.map(batch, chunks):
+            for e in evs if isinstance(evs, list) else []:
+                key = by_slug.get(e.get("slug"))
+                if not key:
+                    continue
+                party = {}
+                for m in e.get("markets") or []:
+                    t = m.get("groupItemTitle") or ""
+                    pm = re.search(r"\((D|R|I)\)\s*$", t)
+                    if not pm or not m.get("outcomePrices"):
+                        continue
+                    try:
+                        px = round(float(json.loads(m["outcomePrices"])[0]) * 100, 1)
+                    except (ValueError, TypeError, IndexError):
+                        continue
+                    party[pm.group(1)] = max(party.get(pm.group(1), 0), px)
+                if party:
+                    out[key] = party
+    return out
+
+
+def race_composites(groups, poly, w, preds):
+    """Per-race composite: live Kalshi + Polymarket, blended with outlet forecasts where they exist (Senate)."""
+    outlets = {r["st"]: r for r in (preds or {}).get("races", [])}
+    res = {}
+    for kind, (events, summaries) in groups.items():
+        for key, ev in events.items():
+            if not ev:
+                continue
+            sm = summaries.get(key) or {}
+            ms = [m for m in ev["markets"] if m.get("price") is not None]
+            r = next((m for m in ms if (m["ticker"] or "").endswith("-R")), None)
+            chal = max((m for m in ms if m is not r), key=lambda m: m["price"], default=None)
+            if not chal:
+                continue
+            cp = party_of(chal)
+            k = chal["price"]
+            pm = (poly.get(f"{kind}:{key}") or {}).get(cp)
+            mk = [v for v in (k, pm) if v is not None]
+            m_avg = sum(mk) / len(mk)
+            o_vals = []
+            if kind == "senate" and key in outlets:
+                o_vals = [outlets[key][f] for f in ("ddhq", "onpoint") if outlets[key].get(f) is not None]
+            o_avg = sum(o_vals) / len(o_vals) if o_vals else None
+            if sm.get("status") == "called":
+                val = 100.0 if sm.get("winner") == cp else 0.0
+            elif o_avg is not None:
+                val = w * o_avg + (1 - w) * m_avg
+            else:
+                val = m_avg
+            res[f"{kind}:{key}"] = {"c": round(val, 1), "k": k, "pm": pm, "o": None if o_avg is None else round(o_avg, 1), "p": cp}
+    return res
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     now_dt = datetime.now(timezone.utc)
@@ -480,9 +596,11 @@ def main():
         f_house = ex.submit(house_calls)
         f_poly = ex.submit(polymarket)
         f_hev = ex.submit(house_events)
+        f_pr = ex.submit(poly_races)
         res = {k: f.result() for k, f in futs.items()}
         heads, truth, hcalls, poly = f_head.result(), f_truth.result(), f_house.result(), f_poly.result()
         house = f_hev.result()
+        poly_r = f_pr.result()
 
     control = {k: res[f"c:{k}"] for k in CONTROL_EVENTS}
     senate = {st: res[f"r:{st}"] for st in SENATE_STATES}
@@ -527,6 +645,13 @@ def main():
     }
 
     comp = composite(control, poly, seats, now_dt)
+    try:
+        preds = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "predictions.json")))
+    except (OSError, ValueError):
+        preds = {}
+    comp["races"] = race_composites({"senate": (senate, summaries), "gov": (governors, gov_summary),
+                                     "house": (house, house_summary)}, poly_r, comp["outletWeight"], preds)
+    comp["polyRaces"] = len(poly_r)
     data = {"updated": now, "control": control, "senate": senate, "raceSummary": summaries, "seats": seats,
             "polymarket": poly, "composite": comp,
             "governors": governors, "govSummary": gov_summary, "house": house, "houseSummary": house_summary,

@@ -204,6 +204,10 @@
           <span class="${lost("r")}">${pct(s.rP)} <b style="color:var(--rep)">${esc(s.rName)}</b>${inc("r")} (R)</span></div>
         <div class="bar" aria-hidden="true"><span class="${cls}" style="width:${cW}%"></span><span class="r" style="width:${rW}%"></span>
           ${pre != null ? `<i class="pre" style="left:calc(${pre}% - 1px)"></i>` : ""}</div>
+        ${(() => { const cm = DATA && DATA.composite && DATA.composite.races && DATA.composite.races[`${kind}:${p.st}`]; if (!cm) return "";
+          const pl = cm.p === "R" ? "R" : cm.p === "I" ? "Ind." : "D";
+          return `<div class="comp-line"><span class="comp-pill">Composite ${pl} ${pct(cm.c)}</span>
+            <span>Kalshi ${pct(cm.k)}</span>${cm.pm != null ? `<span>Polymarket ${pct(cm.pm)}</span>` : ""}${cm.o != null ? `<span>Outlets ${pct(cm.o)}</span>` : ""}</div>`; })()}
         <div class="compare">
           <span>${p.inc ? (s.incSide ? "Incumbent running" : `Open seat (${esc(p.inc)} not on ballot)`) : "Open seat"}</span>
           <span>${house ? `Cook PVI: <strong>${p.pvi > 0 ? "R+" + p.pvi : p.pvi < 0 ? "D+" + -p.pvi : "Even"}</strong>` : `2024: <strong>${leanText(p.trump24)}</strong>`}</span>
@@ -309,6 +313,7 @@
         <table class="src-table"><thead><tr><th>Source</th><th>Chamber</th><th>Dem. chance</th></tr></thead>
         <tbody>${rows(H, "House")}${rows(S, "Senate")}${rows(B, "Both")}</tbody></table>
         <p class="note" style="margin-top:8px">Seat projections averaged: ${H.seatSources.map((x) => `${esc(x.name)} ${x.value != null ? Math.round(x.value) : "—"}`).join(" · ")} (House); ${S.seatSources.map((x) => `${esc(x.name)} ${x.value != null ? Math.round(x.value) : "—"}`).join(" · ")} (Senate). Cook and 270toWin publish ratings, not probabilities, so they aren't included.</p>
+        <p class="note">Every race card also shows its own composite: Kalshi and Polymarket for that race, plus Decision Desk HQ and On Point where they published a race forecast (Senate), using the same fading weight. ${DATA.composite.polyRaces ? DATA.composite.polyRaces + " races currently have a Polymarket market." : ""}</p>
       </details>`;
   }
 
