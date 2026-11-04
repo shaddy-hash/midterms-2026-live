@@ -1,0 +1,24 @@
+{
+  "asOf": "Final pre-election forecasts, Nov 1-2, 2026",
+  "control": {
+    "senate": {"ddhq": 65, "kalshi": 74, "onpoint": 88, "label": "Senate"},
+    "house": {"ddhq": 84, "kalshi": 94, "onpoint": 98, "label": "House", "ddhqSeats": 241}
+  },
+  "combo": {"ddhq": {"Democrats sweep": 63, "D House, R Senate": 21, "R House, D Senate": 2, "Republicans sweep": 15}},
+  "races": [
+    {"st": "KS", "name": "Kansas", "hold": "R", "chal": "D", "d": "Hamilton", "r": "Marshall", "kalshi": 63, "ddhq": 51, "onpoint": 77, "poll": 3.2, "closes": "8 PM ET"},
+    {"st": "IA", "name": "Iowa", "hold": "R", "chal": "D", "d": "Turek", "r": "Hinson", "kalshi": 52, "ddhq": 53, "onpoint": 69, "poll": 0.8, "closes": "10 PM ET"},
+    {"st": "OH", "name": "Ohio (special)", "hold": "R", "chal": "D", "d": "Brown", "r": "Husted", "kalshi": 71, "ddhq": 54, "onpoint": 90, "poll": 2.3, "closes": "7:30 PM ET"},
+    {"st": "TX", "name": "Texas", "hold": "R", "chal": "D", "d": "Talarico", "r": "Paxton", "kalshi": 75, "ddhq": 62, "onpoint": 76, "poll": 3.6, "closes": "8 PM ET"},
+    {"st": "ME", "name": "Maine", "hold": "R", "chal": "D", "d": "Jackson", "r": "Collins", "kalshi": 73, "ddhq": 65, "onpoint": 80, "poll": 3.0, "closes": "8 PM ET"},
+    {"st": "AK", "name": "Alaska", "hold": "R", "chal": "D", "d": "Peltola", "r": "Sullivan", "kalshi": 70, "ddhq": 61, "onpoint": 79, "poll": 1.8, "closes": "1 AM ET"},
+    {"st": "NE", "name": "Nebraska", "hold": "R", "chal": "I", "d": "Osborn", "r": "Ricketts", "kalshi": null, "ddhq": 27, "onpoint": 62, "poll": -1.0, "closes": "9 PM ET"},
+    {"st": "SC", "name": "South Carolina", "hold": "R", "chal": "D", "d": "Andrews", "r": "Graham", "kalshi": 33, "ddhq": 39, "onpoint": 53, "poll": -0.5, "closes": "7 PM ET"},
+    {"st": "FL", "name": "Florida (special)", "hold": "R", "chal": "D", "d": "Nixon", "r": "Moody", "kalshi": null, "ddhq": 25, "onpoint": 26, "poll": null, "closes": "8 PM ET"},
+    {"st": "MI", "name": "Michigan", "hold": "D", "chal": "D", "d": "El-Sayed", "r": "Rogers", "kalshi": 78, "ddhq": 75, "onpoint": 95, "poll": 5.1, "closes": "9 PM ET"},
+    {"st": "NC", "name": "North Carolina", "hold": "R", "chal": "D", "d": "Cooper", "r": "Whatley", "kalshi": null, "ddhq": null, "onpoint": null, "poll": 9.5, "closes": "7:30 PM ET"},
+    {"st": "NH", "name": "New Hampshire", "hold": "D", "chal": "D", "d": "Pappas", "r": "Sununu", "kalshi": null, "ddhq": null, "onpoint": null, "poll": 8.3, "closes": "8 PM ET"},
+    {"st": "GA", "name": "Georgia", "hold": "D", "chal": "D", "d": "Ossoff", "r": "Collins", "kalshi": null, "ddhq": null, "onpoint": null, "poll": 8.0, "closes": "7 PM ET"},
+    {"st": "MN", "name": "Minnesota", "hold": "D", "chal": "D", "d": "Flanagan", "r": "Tafoya", "kalshi": null, "ddhq": null, "onpoint": null, "poll": 14.0, "closes": "9 PM ET"}
+  ]
+}

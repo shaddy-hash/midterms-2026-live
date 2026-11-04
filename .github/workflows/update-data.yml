@@ -1,0 +1,45 @@
+name: Update live data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: main
+
+      - name: Check out data branch
+        run: |
+          git clone --depth 1 --branch data "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data \
+            || (mkdir data && cd data && git init -b data && git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git")
+          cd data
+          git config user.name "live-data-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Refresh every 90 seconds for up to ~5.5 hours
+        run: |
+          end=$(( $(date +%s) + 19800 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            python3 main/scripts/fetch_data.py data || true
+            cd data
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -q -m "data $(date -u +%H:%M:%S)"
+              git push -q origin data || (git pull -q --rebase origin data && git push -q origin data) || true
+            fi
+            cd ..
+            sleep 90
+          done
