@@ -262,8 +262,32 @@
     const last = rows.slice(-12).reverse();
     const f = (t) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     return `<details class="trk-table"><summary>Every 5 minutes (last hour)</summary><table>
-      <thead><tr><th>Time</th><th>Control (D)</th><th>Pred. D seats</th><th>D ${c.id === "senate" ? "locked" : "called"}</th><th>R ${c.id === "senate" ? "locked" : "called"}</th></tr></thead>
-      <tbody>${last.map((r) => `<tr><td>${f(r.t)}</td><td>${pct(r.p)}</td><td>${r.exp != null ? Math.round(r.exp) : "—"}</td><td>${r.d ?? "—"}</td><td>${r.r ?? "—"}</td></tr>`).join("")}</tbody></table></details>`;
+      <thead><tr><th>Time</th><th>Composite</th><th>Kalshi</th><th>Pred. D seats</th><th>D ${c.id === "senate" ? "locked" : "called"}</th><th>R ${c.id === "senate" ? "locked" : "called"}</th></tr></thead>
+      <tbody>${last.map((r) => `<tr><td>${f(r.t)}</td><td>${pct(r.c)}</td><td>${pct(r.p)}</td><td>${r.exp != null ? Math.round(r.exp) : "—"}</td><td>${r.d ?? "—"}</td><td>${r.r ?? "—"}</td></tr>`).join("")}</tbody></table></details>`;
+  }
+
+  // ---------- composite forecast ----------
+  function renderComposite() {
+    const el = $("#composite");
+    const c = DATA && DATA.composite;
+    if (!c) { el.innerHTML = '<div class="skeleton">The composite appears once the next data refresh runs.</div>'; return; }
+    const H = c.chambers.house, S = c.chambers.senate, B = c.chambers.both;
+    const col = (v) => (v == null ? "inherit" : v >= 50 ? "var(--dem)" : "var(--rep)");
+    const mw = Math.round(c.marketWeight * 100), ow = 100 - mw;
+    const cell = (x, lab, maj) => `<div><div class="kl">${lab} · Dem. chance</div>
+        <div class="kv" style="color:${col(x.value)}">${x.settled ? (x.settled === "D" ? "Won" : "Lost") : pct(x.value)}</div>
+        <div class="ks">${x.seats != null ? `~${Math.round(x.seats)} D seats (majority ${maj})` : ""}</div>
+        <div class="ks">Markets ${pct(x.marketAvg)} · Outlets ${pct(x.outletAvg)}</div></div>`;
+    const rows = (x, lab) => x.sources.map((s) => `<tr><td>${esc(s.name)} <span class="src-type">${s.type === "market" ? "live market" : "final forecast · " + esc(s.asOf)}</span></td><td>${lab}</td><td><b>${pct(s.value)}</b></td></tr>`).join("");
+    el.innerHTML = `<div class="comp-grid">${cell(H, "House", 218)}${cell(S, "Senate", 51)}</div>
+      <div class="comp-both"><span>Democrats win both chambers</span><b style="color:${col(B.value)}">${pct(B.value)}</b></div>
+      <div class="weights" role="img" aria-label="Weighting: markets ${mw}%, outlets ${ow}%"><span class="wm" style="width:${mw}%"></span><span class="wo" style="width:${ow}%"></span></div>
+      <div class="ks" style="font-size:12.5px;color:var(--muted)">Weighting now: live markets ${mw}% · outlet forecasts ${ow}%. Outlets count for half until polls close at 7 PM ET, then fade to zero by 1 AM ET as real votes replace pre-election models.</div>
+      <details style="margin-top:6px"><summary>See every source</summary>
+        <table class="src-table"><thead><tr><th>Source</th><th>Chamber</th><th>Dem. chance</th></tr></thead>
+        <tbody>${rows(H, "House")}${rows(S, "Senate")}${rows(B, "Both")}</tbody></table>
+        <p class="note" style="margin-top:8px">Seat projections averaged: ${H.seatSources.map((x) => `${esc(x.name)} ${x.value != null ? Math.round(x.value) : "—"}`).join(" · ")} (House); ${S.seatSources.map((x) => `${esc(x.name)} ${x.value != null ? Math.round(x.value) : "—"}`).join(" · ")} (Senate). Cook and 270toWin publish ratings, not probabilities, so they aren't included.</p>
+      </details>`;
   }
 
   // ---------- Truth Social ----------
@@ -297,6 +321,7 @@
     renderKPI("#kpi-senate", c.senate, PRED.control.senate, "Senate");
     renderCombo(c.combo);
     renderTrend();
+    renderComposite();
     renderRaces("senate");
     renderRaces("gov");
     renderTracker();

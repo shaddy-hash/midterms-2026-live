@@ -147,12 +147,13 @@ def expected_seats(ev):
     for m in ev["markets"]:
         p = m["price"] or 0
         lo, hi, st = m.get("floor"), m.get("cap"), m.get("strike")
+        st = st or ""
         if st == "between" and lo is not None and hi is not None:
             mid = (lo + hi) / 2
-        elif st == "less" and hi is not None:
-            mid = hi - 3
-        elif st == "greater" and lo is not None:
-            mid = lo + 4
+        elif st.startswith("less") and hi is not None:
+            mid = hi - (1 if hi - (lo or 0) > 50 else 2)  # open lower tail: just below the cap
+        elif st.startswith("greater") and lo is not None:
+            mid = lo + (1 if st.endswith("equal") else 4)  # open upper tail: just above the floor
         else:
             continue
         tot += p * mid
@@ -311,6 +312,98 @@ def house_calls():
     return c
 
 
+# ---------- composite forecast ----------
+# Final published forecasts from major outlets (probability Democrats win; projected Democratic seats).
+OUTLETS = {
+    "house": {"prob": [("Decision Desk HQ", 84, "Nov 2"), ("The Economist", 94, "Nov 3"),
+                       ("Silver Bulletin", 93.1, "Oct 8"), ("On Point Politics", 98, "Nov 1")],
+              "seats": [("Decision Desk HQ", 241), ("The Economist", 235), ("Silver Bulletin", 238.7),
+                        ("Sabato's Crystal Ball", 239), ("On Point Politics", 251)]},
+    "senate": {"prob": [("Decision Desk HQ", 65, "Nov 2"), ("Silver Bulletin", 75, "Oct 19"),
+                        ("On Point Politics", 88, "Nov 1")],
+               "seats": [("Decision Desk HQ", 52), ("The Economist", 51), ("Silver Bulletin", 52.2),
+                         ("On Point Politics", 54.8)]},
+    "both": {"prob": [("Decision Desk HQ", 63, "Nov 2"), ("Silver Bulletin", 74.5, "Oct 8")]},
+}
+POLY_COMBO = "https://gamma-api.polymarket.com/events?slug=balance-of-power-2026-midterms"
+
+
+def polymarket():
+    """Democratic chances from Polymarket's balance-of-power market (House, Senate, both)."""
+    j = get(POLY_COMBO)
+    try:
+        ms = j[0]["markets"]
+    except (TypeError, IndexError, KeyError):
+        return None
+    px = {}
+    for m in ms:
+        try:
+            px[m.get("groupItemTitle", "")] = round(float(json.loads(m["outcomePrices"])[0]) * 100, 1)
+        except (KeyError, ValueError, TypeError, IndexError):
+            continue
+    dd, ds_rh, rs_dh = px.get("Democrats Sweep"), px.get("D Senate, R House"), px.get("R Senate, D House")
+    if dd is None:
+        return None
+    return {"both": dd, "house": round(dd + (rs_dh or 0), 1), "senate": round(dd + (ds_rh or 0), 1), "raw": px}
+
+
+def outlet_weight(now_dt):
+    """Outlets count for half the composite until 7 PM ET, then fade to zero by 1 AM ET as real votes arrive."""
+    start = ELECTION_DAY_UTC
+    hrs = (now_dt - start).total_seconds() / 3600
+    if hrs <= 0:
+        return 0.5
+    return round(max(0.0, 0.5 * (1 - hrs / 6)), 3)
+
+
+def composite(control, poly, seats, now_dt):
+    w = outlet_weight(now_dt)
+    out = {"outletWeight": w, "marketWeight": round(1 - w, 3), "chambers": {}}
+
+    def dem_price(ev):
+        if not ev:
+            return None, None
+        d = next((m for m in ev["markets"] if (m["ticker"] or "").endswith("-D")), None)
+        settled = next((m for m in ev["markets"] if m["result"] == "yes"), None)
+        return (d["price"] if d else None), (party_of(settled) if settled else None)
+
+    def combo_dd(ev):
+        if not ev:
+            return None
+        m = next((m for m in ev["markets"] if (m["ticker"] or "").endswith("-DD") or "sweep" in (m["name"] or "").lower() and "dem" in (m["name"] or "").lower()), None)
+        return m["price"] if m else None
+
+    for ch in ("house", "senate", "both"):
+        if ch == "both":
+            k, settled = combo_dd(control.get("combo")), None
+        else:
+            k, settled = dem_price(control.get(ch))
+        pm = poly.get(ch) if poly else None
+        markets = [x for x in (("Kalshi", k), ("Polymarket", pm)) if x[1] is not None]
+        outlets = OUTLETS[ch]["prob"]
+        m_avg = sum(v for _, v in markets) / len(markets) if markets else None
+        o_avg = sum(v for _, v, _ in outlets) / len(outlets)
+        if settled:
+            value = 100.0 if settled == "D" else 0.0
+        elif m_avg is None:
+            value = o_avg
+        else:
+            value = w * o_avg + (1 - w) * m_avg
+        entry = {"value": round(value, 1), "marketAvg": None if m_avg is None else round(m_avg, 1),
+                 "outletAvg": round(o_avg, 1), "settled": settled,
+                 "sources": [{"name": n, "value": v, "type": "market", "asOf": "live"} for n, v in markets] +
+                            [{"name": n, "value": v, "type": "outlet", "asOf": d} for n, v, d in outlets]}
+        if ch != "both":
+            o_seats = OUTLETS[ch]["seats"]
+            os_avg = sum(v for _, v in o_seats) / len(o_seats)
+            live = seats[ch].get("expD_market") or seats[ch].get("expD_races")
+            entry["seats"] = round(w * os_avg + (1 - w) * live, 1) if live is not None else round(os_avg, 1)
+            entry["seatSources"] = [{"name": "Kalshi seat market", "value": live, "type": "market"}] + \
+                                   [{"name": n, "value": v, "type": "outlet"} for n, v in o_seats]
+        out["chambers"][ch] = entry
+    return out
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     now_dt = datetime.now(timezone.utc)
@@ -325,8 +418,9 @@ def main():
         f_head = ex.submit(headlines)
         f_truth = ex.submit(truth_posts)
         f_house = ex.submit(house_calls)
+        f_poly = ex.submit(polymarket)
         res = {k: f.result() for k, f in futs.items()}
-        heads, truth, hcalls = f_head.result(), f_truth.result(), f_house.result()
+        heads, truth, hcalls, poly = f_head.result(), f_truth.result(), f_house.result(), f_poly.result()
 
     control = {k: res[f"c:{k}"] for k in CONTROL_EVENTS}
     senate = {st: res[f"r:{st}"] for st in SENATE_STATES}
@@ -357,7 +451,9 @@ def main():
                   "expD_market": expected_seats(res["s:house"])},
     }
 
+    comp = composite(control, poly, seats, now_dt)
     data = {"updated": now, "control": control, "senate": senate, "raceSummary": summaries, "seats": seats,
+            "polymarket": poly, "composite": comp,
             "governors": governors, "govSummary": gov_summary,
             "headlines": heads, "truth": truth}
     with open(os.path.join(OUT_DIR, "data.json"), "w") as fh:
@@ -383,9 +479,12 @@ def main():
     # 5-minute tracker: predicted vs. actual seats. One row per bucket; the latest run in a bucket wins.
     bucket = now_dt.replace(minute=now_dt.minute - now_dt.minute % 5, second=0, microsecond=0).isoformat(timespec="minutes")
     row = {"t": bucket,
-           "house": {"p": dem(control.get("house")), "exp": seats["house"]["expD_market"],
+           "house": {"p": dem(control.get("house")), "c": comp["chambers"]["house"]["value"],
+                     "cs": comp["chambers"]["house"].get("seats"), "exp": seats["house"]["expD_market"],
                      "d": seats["house"]["calledD"], "r": seats["house"]["calledR"]},
-           "senate": {"p": dem(control.get("senate")), "exp": seats["senate"]["expD_market"] or seats["senate"]["expD_races"],
+           "senate": {"p": dem(control.get("senate")), "c": comp["chambers"]["senate"]["value"],
+                      "cs": comp["chambers"]["senate"].get("seats"),
+                      "exp": seats["senate"]["expD_market"] or seats["senate"]["expD_races"],
                       "d": seats["senate"]["totalD"], "r": seats["senate"]["totalR"],
                       "called": seats["senate"]["racesCalled"]}}
     tr_path = os.path.join(OUT_DIR, "tracker.json")

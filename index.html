@@ -120,6 +120,18 @@ details{margin-top:8px} summary{cursor:pointer;font-weight:500;color:var(--text-
 .xtab[data-p="d"][aria-selected="true"]{background:var(--dem);border-color:var(--dem);color:#fff}
 .xtab[data-p="r"][aria-selected="true"]{background:var(--rep);border-color:var(--rep);color:#fff}
 .xopen{display:inline-flex;align-items:center;min-height:44px;font-weight:600;color:var(--dem);text-decoration:none}
+.comp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.comp-grid .kl{font-size:13px;color:var(--text-2);font-weight:500}
+.comp-grid .kv{font-size:38px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.comp-grid .ks{font-size:12.5px;color:var(--muted)}
+.comp-both{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:14px}
+.weights{display:flex;height:8px;border-radius:999px;overflow:hidden;margin:12px 0 4px;background:var(--surface-2)}
+.weights .wm{background:var(--text)} .weights .wo{background:var(--muted);opacity:.45}
+.src-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+.src-table td,.src-table th{padding:6px 4px;border-bottom:1px solid var(--border);text-align:right}
+.src-table td:first-child,.src-table th:first-child{text-align:left}
+.src-table th{font-size:11.5px;color:var(--muted);font-weight:600}
+.src-type{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 footer{padding:24px 0 40px}
 @media (min-width:640px){ .kpi .value{font-size:40px} }
 </style>
@@ -138,6 +150,11 @@ footer{padding:24px 0 40px}
 
 <main class="wrap">
   <div class="banner" id="banner" role="status"></div>
+
+  <section aria-labelledby="h-comp">
+    <h2 id="h-comp">Composite forecast</h2>
+    <div class="card" id="composite"><div class="skeleton">Loading…</div></div>
+  </section>
 
   <section aria-labelledby="h-control">
     <h2 id="h-control">Who controls Congress</h2>
@@ -238,7 +255,7 @@ footer{padding:24px 0 40px}
   </footer>
 </main>
 
-<script src="app.js?v=5" defer></script>
+<script src="app.js?v=6" defer></script>
 <script>
 (function(){
   var loaded=false, box=document.getElementById('xfeed');
