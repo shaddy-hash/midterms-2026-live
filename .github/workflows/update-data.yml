@@ -33,6 +33,7 @@ jobs:
         run: |
           end=$(( $(date +%s) + 19800 ))
           while [ "$(date +%s)" -lt "$end" ]; do
+            (cd data && git pull -q --rebase origin data 2>/dev/null || true)
             python3 main/scripts/fetch_data.py data || true
             cd data
             git add -A

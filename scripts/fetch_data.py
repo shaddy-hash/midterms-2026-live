@@ -209,7 +209,22 @@ def get_browser(url, as_json=True):
         return None
 
 
+def relay_posts():
+    """Posts pushed to truth.json by a browser relay (a signed-in Chrome tab on truthsocial.com)."""
+    try:
+        j = json.load(open(os.path.join(OUT_DIR, "truth.json")))
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(j["updated"].replace("Z", "+00:00"))).total_seconds()
+        if age < 20 * 60 and j.get("posts"):
+            return {"source": "truthsocial.com (live relay)", "posts": j["posts"][:20], "relayUpdated": j["updated"]}
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
 def truth_posts():
+    relayed = relay_posts()
+    if relayed:
+        return relayed
     posts, source = [], None
     j = get_browser(TRUTH_API)
     if isinstance(j, list):
