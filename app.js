@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const REFRESH_MS = 60000;
+  const REFRESH_MS = 75000;
   const qs = new URLSearchParams(location.search);
   const owner = location.hostname.endsWith("github.io") ? location.hostname.split(".")[0] : (qs.get("owner") || "");
   const repo = location.hostname.endsWith("github.io") ? (location.pathname.split("/")[1] || "") : (qs.get("repo") || "");
@@ -198,7 +198,17 @@
 
   async function load() {
     try { if (!PRED) PRED = await getJSON("predictions.json"); } catch (e) { console.error(e); }
-    try { DATA = await getJSON(DATA_BASE + "data.json"); } catch (e) { console.warn("data", e); }
+    // GitHub API serves the freshest copy (raw.githubusercontent caches ~5 min). Conditional (ETag) requests that
+    // return 304 don't count against the 60/hr anonymous limit; fall back to the raw CDN if the API refuses.
+    try {
+      if (qs.get("data")) throw new Error("local");
+      const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/data.json?ref=data`,
+        { headers: { Accept: "application/vnd.github.raw+json" }, cache: "no-cache" });
+      if (!r.ok) throw new Error("api " + r.status);
+      DATA = await r.json();
+    } catch (e) {
+      try { DATA = await getJSON(DATA_BASE + "data.json"); } catch (e2) { console.warn("data", e2); }
+    }
     try { HIST = await getJSON(DATA_BASE + "history.json"); } catch (e) { HIST = HIST || []; }
     renderAll();
   }
