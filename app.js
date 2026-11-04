@@ -10,7 +10,7 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const pct = (v) => (v == null || isNaN(v) ? "—" : `${Math.round(v)}%`);
   const sign = (v) => (v > 0 ? "+" : v < 0 ? "−" : "±") + Math.abs(Math.round(v));
-  let PRED = null, DATA = null, HIST = [], filter = "key", govFilter = "key";
+  let PRED = null, DATA = null, HIST = [], filter = "key", govFilter = "key", houseFilter = "key", houseQuery = "", houseLimit = 40;
 
   async function getJSON(url) {
     const r = await fetch(url + (url.includes("?") ? "&" : "?") + "t=" + Date.now(), { cache: "no-store" });
@@ -105,16 +105,18 @@
 
   // ---------- races ----------
   const lastName = (n) => String(n || "").trim().split(/\s+/).pop().toLowerCase();
+  const SRC = { senate: ["senate", "raceSummary"], gov: ["governors", "govSummary"], house: ["house", "houseSummary"] };
   function raceState(p, kind) {
     const gov = kind === "gov";
-    const ev = DATA && DATA[gov ? "governors" : "senate"] && DATA[gov ? "governors" : "senate"][p.st];
+    const [evKey, smKey] = SRC[kind] || SRC.senate;
+    const ev = DATA && DATA[evKey] && DATA[evKey][p.st];
     const ms = ((ev && ev.markets) || []).filter((m) => m.price != null);
     const r = ms.find((m) => /-R$/.test(m.ticker || ""));
     const chal = ms.filter((m) => m !== r).sort((a, b) => (b.price ?? 0) - (a.price ?? 0))[0];
     const chalParty = chal ? (/-D$/.test(chal.ticker || "") ? "d" : "i") : (p.chal === "I" ? "i" : "d");
     const won = ms.find((m) => m.result === "yes");
     const cP = chal ? chal.price : null, rP = r ? r.price : null;
-    const sm = DATA && DATA[gov ? "govSummary" : "raceSummary"] && DATA[gov ? "govSummary" : "raceSummary"][p.st];
+    const sm = DATA && DATA[smKey] && DATA[smKey][p.st];
     const closed = sm ? sm.closed !== false : true;
     let status = "none", winner = null, winM = null;
     if (won) { status = "called"; winM = won; winner = won === r ? "r" : chalParty; }
@@ -134,7 +136,7 @@
     const lean = p.trump24 ?? 0; // + = Republican-leaning (Trump 2024 margin)
     const againstLean = decided && ((lean >= 0 && winner !== "r") || (lean < 0 && winner === "r"));
     const leanSize = Math.abs(lean);
-    const preFav = p.kalshi != null ? (p.kalshi >= 50 ? chalParty : "r") : p.poll != null ? (p.poll >= 0 ? chalParty : "r") : gov ? null : (lean >= 0 ? "r" : chalParty);
+    const preFav = p.kalshi != null ? (p.kalshi >= 50 ? chalParty : "r") : p.poll != null ? (p.poll >= 0 ? chalParty : "r") : (gov || kind === "house") ? null : (lean >= 0 ? "r" : chalParty);
     const beatFav = decided && preFav && winner !== preFav;
     const incLost = decided && incSide && winner !== incSide;
     let upset = null;
@@ -158,15 +160,19 @@
   const leanText = (v) => (v == null ? "" : v >= 0 ? `Trump +${Math.round(v)}` : `Harris +${Math.round(-v)}`);
 
   function renderRaces(kind) {
-    const gov = kind === "gov";
-    const list = $(gov ? "#govs" : "#races");
-    const all = gov ? PRED.governors || [] : PRED.races;
-    const filter = gov ? govFilter : window.__senFilter || "key";
-    const pin = gov ? ["KS", "NE"] : [];
+    const gov = kind === "gov", house = kind === "house";
+    const list = $(gov ? "#govs" : house ? "#house-races" : "#races");
+    const all = gov ? PRED.governors || [] : house ? HOUSE || [] : PRED.races;
+    const filter = gov ? govFilter : house ? houseFilter : window.__senFilter || "key";
+    const pin = gov ? ["KS", "NE"] : house ? ["NE02", "NE01", "NE03"] : [];
     let races = all.map((p) => ({ p, s: raceState(p, kind) }));
+    if (house) {
+      races.forEach((x) => { x.p.key = x.s.cP != null && x.s.cP >= 8 && x.s.cP <= 92; });
+      if (houseQuery) { const q = houseQuery.toLowerCase(); races = races.filter((x) => (x.p.name + " " + x.p.st + " " + x.s.cName + " " + x.s.rName + " " + (x.p.inc || "")).toLowerCase().includes(q)); }
+    }
     const n = { key: 0, called: 0, upsets: 0, flips: 0 };
     races.forEach((x) => { if (x.p.key) n.key++; if (x.s.decided) n.called++; if (x.s.upset) n.upsets++; if (x.s.leanFlip) n.flips++; });
-    document.querySelectorAll((gov ? "#gov-chips" : "#race-chips") + " .chip").forEach((c) => { const k = c.dataset.f; c.textContent = c.dataset.label + (n[k] != null ? ` · ${n[k]}` : ` · ${all.length}`); });
+    document.querySelectorAll((gov ? "#gov-chips" : house ? "#house-chips" : "#race-chips") + " .chip").forEach((c) => { const k = c.dataset.f; c.textContent = c.dataset.label + (n[k] != null ? ` · ${n[k]}` : ` · ${all.length}`); });
     if (filter === "key") races = races.filter((x) => x.p.key || x.s.upset);
     if (filter === "called") races = races.filter((x) => x.s.decided);
     if (filter === "upsets") races = races.filter((x) => x.s.upset);
@@ -177,6 +183,8 @@
       const rank = (x) => (x.s.upset === "major" ? 0 : x.s.upset ? 1 : x.s.status === "called" ? 2 : x.s.status === "proj" ? 3 : 4);
       return rank(a) - rank(b) || Math.abs((a.s.cP ?? 50) - 50) - Math.abs((b.s.cP ?? 50) - 50);
     });
+    let more = "";
+    if (house && races.length > houseLimit) { more = `<button class="refresh" id="house-more" style="width:100%;min-height:44px">Show ${Math.min(40, races.length - houseLimit)} more of ${races.length - houseLimit} remaining</button>`; races = races.slice(0, houseLimit); }
     if (!races.length) { list.innerHTML = `<div class="card skeleton">${filter === "upsets" ? "No upsets yet. Races appear here once they're called against expectations." : "No races in this view yet."}</div>`; return; }
     list.innerHTML = races.map(({ p, s }) => {
       const cls = s.chalParty;
@@ -186,7 +194,8 @@
       const chalLabel = s.chalParty === "i" ? "Ind." : "D";
       const inc = (side) => (s.incSide === side ? ` <span class="inc" title="Incumbent">INC</span>` : "");
       const lost = (side) => (s.incLost && s.incSide === side ? " lost" : "");
-      const upsetTag = s.upset === "major" ? `<div class="upset-tag">⚡ Major upset · ${s.winner === "r" ? "R" : chalLabel} wins a ${leanText(s.lean)} state</div>`
+      const leanLabel = house ? `${p.pvi > 0 ? "R+" + p.pvi : "D+" + -p.pvi} district` : `${leanText(s.lean)} state`;
+      const upsetTag = s.upset === "major" ? `<div class="upset-tag">⚡ Major upset · ${s.winner === "r" ? "R" : chalLabel} wins a ${leanLabel}</div>`
         : s.upset ? `<div class="upset-tag">⚡ Upset${s.incLost ? " · incumbent defeated" : ""}</div>` : "";
       return `<article class="card race${s.upset ? " is-upset" : ""}${s.upset === "major" ? " is-major" : ""}" aria-label="${esc(p.name)} ${gov ? "governor" : "Senate"} race">
         ${upsetTag}
@@ -197,7 +206,7 @@
           ${pre != null ? `<i class="pre" style="left:calc(${pre}% - 1px)"></i>` : ""}</div>
         <div class="compare">
           <span>${p.inc ? (s.incSide ? "Incumbent running" : `Open seat (${esc(p.inc)} not on ballot)`) : "Open seat"}</span>
-          <span>2024: <strong>${leanText(p.trump24)}</strong></span>
+          <span>${house ? `Cook PVI: <strong>${p.pvi > 0 ? "R+" + p.pvi : p.pvi < 0 ? "D+" + -p.pvi : "Even"}</strong>` : `2024: <strong>${leanText(p.trump24)}</strong>`}</span>
           ${pre != null ? `<span>Pre-election Kalshi <strong>${pre}%</strong></span>` : ""}
           ${p.ddhq != null ? `<span>DDHQ <strong>${p.ddhq}%</strong></span>` : ""}
           ${p.onpoint != null ? `<span>On Point <strong>${p.onpoint}%</strong></span>` : ""}
@@ -206,7 +215,20 @@
           ${p.closes ? `<span>Polls close ${esc(p.closes)}</span>` : ""}
         </div>
       </article>`;
-    }).join("");
+    }).join("") + more;
+    const mb = $("#house-more"); if (house && mb) mb.addEventListener("click", () => { houseLimit += 40; renderRaces("house"); });
+  }
+
+  // ---------- House metadata ----------
+  let HOUSE = null;
+  const STN = { AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming" };
+  const ord = (n) => n + (["th", "st", "nd", "rd"][((n % 100) - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+  function buildHouse(reps, pvi) {
+    return Object.entries(reps.reps || {}).map(([d, [name, party]]) => {
+      const st = d.slice(0, 2), n = d.slice(2), v = (pvi.pvi || {})[d] ?? 0;
+      return { st: d, name: `${STN[st] || st} ${n === "AL" ? "at-large" : ord(+n)}`, hold: party === "D" ? "D" : "R",
+        inc: party === "V" ? null : name, pvi: v, trump24: v * 2, chal: "D", closes: "" };
+    });
   }
 
   // ---------- prediction vs. results tracker (5-minute buckets) ----------
@@ -323,6 +345,7 @@
     renderTrend();
     renderComposite();
     renderRaces("senate");
+    renderRaces("house");
     renderRaces("gov");
     renderTracker();
     renderTruth();
@@ -339,6 +362,7 @@
 
   async function load() {
     try { if (!PRED) PRED = await getJSON("predictions.json"); } catch (e) { console.error(e); }
+    if (!HOUSE) { try { HOUSE = buildHouse(await getJSON("house_reps.json"), await getJSON("house_pvi.json")); } catch (e) { HOUSE = []; } }
     // GitHub API serves the freshest copy (raw.githubusercontent caches ~5 min). Conditional (ETag) requests that
     // return 304 don't count against the 60/hr anonymous limit; fall back to the raw CDN if the API refuses.
     try {
@@ -355,6 +379,12 @@
     renderAll();
   }
 
+  document.querySelectorAll("#house-chips .chip").forEach((b) => b.addEventListener("click", () => {
+    houseFilter = b.dataset.f; houseLimit = 40;
+    document.querySelectorAll("#house-chips .chip").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    renderRaces("house");
+  }));
+  { let t; const q = document.getElementById("house-q"); if (q) q.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => { houseQuery = q.value.trim(); houseLimit = 40; renderRaces("house"); }, 200); }); }
   document.querySelectorAll("#gov-chips .chip").forEach((b) => b.addEventListener("click", () => {
     govFilter = b.dataset.f;
     document.querySelectorAll("#gov-chips .chip").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));

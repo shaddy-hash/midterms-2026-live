@@ -33,7 +33,8 @@ CLOSE_ET = {"AL": 20, "AK": 25, "AR": 20.5, "CO": 21, "DE": 20, "GA": 19, "ID": 
             "LA": 21, "ME": 20, "MA": 20, "MI": 21, "MN": 21, "MS": 20, "MT": 22, "NE": 22, "NH": 20, "NJ": 20, "NM": 21,
             "NC": 19.5, "OK": 20, "OR": 23, "RI": 20, "SC": 19, "SD": 22, "TN": 20, "TX": 22, "VA": 19, "WV": 19.5,
             "WY": 21, "OH": 19.5, "FL": 20,
-            "AZ": 21, "CA": 23, "CT": 20, "HI": 24, "MD": 20, "NV": 22, "NY": 21, "PA": 20, "VT": 19, "WI": 21}
+            "AZ": 21, "CA": 23, "CT": 20, "HI": 24, "MD": 20, "NV": 22, "NY": 21, "PA": 20, "VT": 19, "WI": 21,
+            "IN": 19, "MO": 20, "ND": 22, "UT": 22, "WA": 23}
 GOV_STATES = ["KS", "NE", "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "FL", "GA", "HI", "ID", "IL", "IA", "ME", "MD", "MA",
               "MI", "MN", "NV", "NH", "NM", "NY", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "VT", "WI", "WY"]
 SERIES_API = "https://api.elections.kalshi.com/trade-api/v2/events?series_ticker={}&with_nested_markets=true"
@@ -309,6 +310,7 @@ def house_calls():
             c["counting"] += 1
     c["updated"] = j.get("updated_at")
     c["recent"] = calls[-15:]
+    c["all"] = calls
     return c
 
 
@@ -404,6 +406,64 @@ def composite(control, poly, seats, now_dt):
     return out
 
 
+# ---------- House races ----------
+HOUSE_SERIES = "https://api.elections.kalshi.com/trade-api/v2/events?series_ticker=KXHOUSERACE&limit=200&with_nested_markets=true"
+
+
+def slim_event(ev):
+    return {"ticker": ev.get("event_ticker"),
+            "markets": [{k: v for k, v in market_view(m).items() if k in ("ticker", "name", "price", "result")}
+                        for m in (ev.get("markets") or [])]}
+
+
+def house_events():
+    out, cursor = {}, ""
+    for _ in range(5):
+        j = get(HOUSE_SERIES + (f"&cursor={cursor}" if cursor else ""))
+        if not j:
+            break
+        for ev in j.get("events") or []:
+            m = re.match(r"KXHOUSERACE-([A-Z]{2})(\d{2}|AL)-", ev.get("event_ticker", ""))
+            if m:
+                out[m.group(1) + m.group(2)] = slim_event(ev)
+        cursor = j.get("cursor")
+        if not cursor or not j.get("events"):
+            break
+    # Older single-district series (e.g. HOUSETX15-26) for districts not in the KXHOUSERACE series. Discovery is cached.
+    cache = os.path.join(OUT_DIR, "house_legacy.json")
+    try:
+        legacy = json.load(open(cache))
+        fresh = (time.time() - os.path.getmtime(cache)) < 3600
+    except (OSError, ValueError):
+        legacy, fresh = {}, False
+    if not fresh:
+        try:
+            reps = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "house_reps.json")))["reps"]
+        except (OSError, ValueError, KeyError):
+            reps = {}
+        legacy = {}
+        missing = [d for d in reps if d not in out]
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            def probe(d):
+                num = d[2:]
+                tk = f"HOUSE{d[:2]}{'AL' if num == 'AL' else int(num)}-26"
+                j = get(API.format(tk), tries=1)
+                return d, (tk if j and j.get("event") else None)
+            for d, tk in ex.map(probe, missing):
+                if tk:
+                    legacy[d] = tk
+        json.dump(legacy, open(cache, "w"))
+    for d, tk in legacy.items():
+        if d in out:
+            continue
+        j = get(API.format(tk))
+        if j and j.get("event"):
+            ev = j["event"]
+            ev.setdefault("markets", j.get("markets") or [])
+            out[d] = slim_event(ev)
+    return out
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     now_dt = datetime.now(timezone.utc)
@@ -419,14 +479,29 @@ def main():
         f_truth = ex.submit(truth_posts)
         f_house = ex.submit(house_calls)
         f_poly = ex.submit(polymarket)
+        f_hev = ex.submit(house_events)
         res = {k: f.result() for k, f in futs.items()}
         heads, truth, hcalls, poly = f_head.result(), f_truth.result(), f_house.result(), f_poly.result()
+        house = f_hev.result()
 
     control = {k: res[f"c:{k}"] for k in CONTROL_EVENTS}
     senate = {st: res[f"r:{st}"] for st in SENATE_STATES}
     summaries = {st: race_summary(ev, polls_closed(st, now_dt)) for st, ev in senate.items()}
     governors = {st: res[f"g:{st}"] for st in GOV_STATES}
     gov_summary = {st: race_summary(ev, polls_closed(st, now_dt)) for st, ev in governors.items()}
+
+    house_summary = {d: race_summary(ev, polls_closed(d[:2], now_dt)) for d, ev in house.items()}
+    h_called = {"D": 0, "R": 0, "I": 0}
+    for d, sm in house_summary.items():
+        if sm and sm["winner"]:
+            h_called[sm["winner"]] += 1
+    # Fill in districts Kalshi doesn't cover with PollCheck (AP/DDHQ) calls when available.
+    if hcalls:
+        for c in hcalls.get("all", []):
+            key = c["d"].replace("-", "")
+            key = key[:2] + (key[2:].zfill(2) if key[2:].isdigit() else "AL")
+            if key not in house_summary or not (house_summary[key] or {}).get("winner"):
+                h_called[c["p"]] += 1
 
     # Senate seats: called so far + market-expected total.
     s_called = {"D": 0, "R": 0, "I": 0}
@@ -444,8 +519,8 @@ def main():
                    "totalD": NOT_UP["D"] + s_called["D"], "totalR": NOT_UP["R"] + s_called["R"],
                    "expD_market": expected_seats(res["s:senate"]),
                    "expD_races": round(NOT_UP["D"] + exp_d_races, 1)},
-        "house": {"calledD": hcalls["D"] if hcalls else None, "calledR": hcalls["R"] if hcalls else None,
-                  "calledI": hcalls["I"] if hcalls else None, "counting": hcalls["counting"] if hcalls else None,
+        "house": {"calledD": h_called["D"], "calledR": h_called["R"], "calledI": h_called["I"],
+                  "kalshiDistricts": len(house), "counting": hcalls["counting"] if hcalls else None,
                   "racesTotal": 435, "sourceUpdated": hcalls["updated"] if hcalls else None,
                   "recent": hcalls["recent"] if hcalls else [],
                   "expD_market": expected_seats(res["s:house"])},
@@ -454,7 +529,7 @@ def main():
     comp = composite(control, poly, seats, now_dt)
     data = {"updated": now, "control": control, "senate": senate, "raceSummary": summaries, "seats": seats,
             "polymarket": poly, "composite": comp,
-            "governors": governors, "govSummary": gov_summary,
+            "governors": governors, "govSummary": gov_summary, "house": house, "houseSummary": house_summary,
             "headlines": heads, "truth": truth}
     with open(os.path.join(OUT_DIR, "data.json"), "w") as fh:
         json.dump(data, fh, separators=(",", ":"))

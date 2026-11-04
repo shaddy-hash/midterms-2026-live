@@ -201,6 +201,21 @@ footer{padding:24px 0 40px}
     <div class="races" id="races"><div class="card skeleton">Loading…</div></div>
   </section>
 
+  <section aria-labelledby="h-house">
+    <h2 id="h-house">House races</h2>
+    <p class="note" style="margin:-4px 2px 10px">Live Kalshi odds for every district Kalshi lists. "Key" = races between 8% and 92%. Incumbents come from the current House roster; district lean is the Cook PVI. Major upset = the seat flips to the party the district leans against by 5+ PVI points.</p>
+    <input type="search" id="house-q" placeholder="Search state, district or candidate" aria-label="Search House races"
+      style="width:100%;min-height:44px;border:1px solid var(--border);border-radius:12px;padding:0 14px;font:400 15px Inter,system-ui,sans-serif;background:var(--surface);color:var(--text);margin-bottom:10px">
+    <div class="chips" role="group" aria-label="Filter House races" id="house-chips">
+      <button class="chip" data-f="key" data-label="Key" aria-pressed="true">Key</button>
+      <button class="chip" data-f="upsets" data-label="Upsets" aria-pressed="false">Upsets</button>
+      <button class="chip" data-f="called" data-label="Decided" aria-pressed="false">Decided</button>
+      <button class="chip" data-f="flips" data-label="Flipping" aria-pressed="false">Flipping</button>
+      <button class="chip" data-f="all" data-label="All" aria-pressed="false">All</button>
+    </div>
+    <div class="races" id="house-races"><div class="card skeleton">Loading…</div></div>
+  </section>
+
   <section aria-labelledby="h-gov">
     <h2 id="h-gov">Governor races</h2>
     <p class="note" style="margin:-4px 2px 10px">Kansas and Nebraska are pinned to the top. Same rules as the Senate: <span class="inc">INC</span> = incumbent on the ballot; ⚡ Upset = incumbent defeated, underdog won, or the seat flipped against the state's lean; Major upset = flipped to the party that lost the state by 10+ in 2024.</p>
@@ -255,7 +270,7 @@ footer{padding:24px 0 40px}
   </footer>
 </main>
 
-<script src="app.js?v=6" defer></script>
+<script src="app.js?v=7" defer></script>
 <script>
 (function(){
   var loaded=false, box=document.getElementById('xfeed');
