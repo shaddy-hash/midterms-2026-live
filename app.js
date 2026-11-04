@@ -104,26 +104,44 @@
   }
 
   // ---------- races ----------
+  const lastName = (n) => String(n || "").trim().split(/\s+/).pop().toLowerCase();
   function raceState(p) {
     const ev = DATA && DATA.senate && DATA.senate[p.st];
-    const ms = (ev && ev.markets) || [];
+    const ms = ((ev && ev.markets) || []).filter((m) => m.price != null);
     const r = ms.find((m) => /-R$/.test(m.ticker || ""));
     const chal = ms.filter((m) => m !== r).sort((a, b) => (b.price ?? 0) - (a.price ?? 0))[0];
+    const chalParty = chal ? (/-D$/.test(chal.ticker || "") ? "d" : "i") : (p.chal === "I" ? "i" : "d");
     const won = ms.find((m) => m.result === "yes");
     const cP = chal ? chal.price : null, rP = r ? r.price : null;
-    const cParty = p.chal.toLowerCase();
-    let status = "none", winner = null;
-    if (won) { status = "called"; winner = won === r ? "r" : cParty; }
-    else if (cP != null && cP >= 97) { status = "proj"; winner = cParty; }
-    else if (rP != null && rP >= 97) { status = "proj"; winner = "r"; }
-    else if (cP != null) { status = cP >= 35 && cP <= 65 ? "toss" : "lean"; winner = cP > 50 ? cParty : "r"; }
-    const holdParty = p.hold.toLowerCase();
-    const flip = winner && (status === "called" || status === "proj") && ((holdParty === "r" && winner !== "r") || (holdParty !== "r" && winner === "r"));
-    const leanFlip = winner && ((holdParty === "r" && winner !== "r") || (holdParty !== "r" && winner === "r"));
-    return { ev, r, chal, cP, rP, status, winner, flip, leanFlip, cName: chal && !/party/i.test(chal.name || "") ? chal.name : p.d, rName: r && !/party/i.test(r.name || "") ? r.name : p.r };
+    let status = "none", winner = null, winM = null;
+    if (won) { status = "called"; winM = won; winner = won === r ? "r" : chalParty; }
+    else if (cP != null && cP >= 99) { status = "proj"; winM = chal; winner = chalParty; }
+    else if (rP != null && rP >= 99) { status = "proj"; winM = r; winner = "r"; }
+    else if (cP != null) { status = cP >= 35 && cP <= 65 ? "toss" : "lean"; winner = cP > 50 ? chalParty : "r"; }
+    const decided = status === "called" || status === "proj";
+    const hold = p.hold.toLowerCase();
+    const flipsSeat = (w) => w && ((hold === "r" && w !== "r") || (hold !== "r" && w === "r"));
+    const flip = decided && flipsSeat(winner);
+    const nameOf = (m, fb) => (m && !/party/i.test(m.name || "") ? m.name : fb);
+    const cName = nameOf(chal, p.d || "Democrat"), rName = nameOf(r, p.r || "Republican");
+    // Incumbent: only when the sitting senator is actually on the ballot.
+    const incOn = p.inc && [cName, rName].some((n) => lastName(n) === lastName(p.inc) && String(n).toLowerCase().includes(p.inc.split(" ")[0].toLowerCase()));
+    const incSide = incOn ? (lastName(rName) === lastName(p.inc) ? "r" : chalParty) : null;
+    // Upsets: decided against the state's usual lean, against the pre-election favourite, or an incumbent beaten.
+    const lean = p.trump24 ?? 0; // + = Republican-leaning (Trump 2024 margin)
+    const againstLean = decided && ((lean >= 0 && winner !== "r") || (lean < 0 && winner === "r"));
+    const leanSize = Math.abs(lean);
+    const preFav = p.kalshi != null ? (p.kalshi >= 50 ? chalParty : "r") : p.poll != null ? (p.poll >= 0 ? chalParty : "r") : (lean >= 0 ? "r" : chalParty);
+    const beatFav = decided && preFav && winner !== preFav;
+    const incLost = decided && incSide && winner !== incSide;
+    let upset = null;
+    if (decided && againstLean && leanSize >= 10) upset = "major";
+    else if (decided && (beatFav || incLost)) upset = "upset";
+    return { ev, r, chal, cP, rP, status, winner, winM, decided, flip, upset, incLost, incSide, cName, rName, chalParty,
+      leanFlip: flipsSeat(winner), lean };
   }
 
-  function badge(s, p) {
+  function badge(s) {
     const party = s.winner;
     const who = party === "r" ? "R" : party === "i" ? "Ind." : "D";
     if (s.status === "called") return `<span class="badge b-called-${party}">✓ Called ${who}${s.flip ? " · flip" : ""}</span>`;
@@ -133,39 +151,121 @@
     return `<span class="badge b-toss">No market</span>`;
   }
 
+  const leanText = (v) => (v == null ? "" : v >= 0 ? `Trump +${Math.round(v)}` : `Harris +${Math.round(-v)}`);
+
   function renderRaces() {
     const list = $("#races");
     let races = PRED.races.map((p) => ({ p, s: raceState(p) }));
-    if (filter === "key") races = races.filter((x) => x.p.kalshi != null || x.p.ddhq != null);
-    if (filter === "called") races = races.filter((x) => x.s.status === "called" || x.s.status === "proj");
+    const n = { key: 0, called: 0, upsets: 0, flips: 0 };
+    races.forEach((x) => { if (x.p.key) n.key++; if (x.s.decided) n.called++; if (x.s.upset) n.upsets++; if (x.s.leanFlip) n.flips++; });
+    document.querySelectorAll(".chip").forEach((c) => { const k = c.dataset.f; if (n[k] != null) c.dataset.count = n[k]; c.textContent = c.dataset.label + (n[k] != null ? ` · ${n[k]}` : " · 35"); });
+    if (filter === "key") races = races.filter((x) => x.p.key || x.s.upset);
+    if (filter === "called") races = races.filter((x) => x.s.decided);
+    if (filter === "upsets") races = races.filter((x) => x.s.upset);
     if (filter === "flips") races = races.filter((x) => x.s.leanFlip);
     races.sort((a, b) => {
-      const rank = (x) => (x.s.status === "called" ? 0 : x.s.status === "proj" ? 1 : 2);
+      const rank = (x) => (x.s.upset === "major" ? 0 : x.s.upset ? 1 : x.s.status === "called" ? 2 : x.s.status === "proj" ? 3 : 4);
       return rank(a) - rank(b) || Math.abs((a.s.cP ?? 50) - 50) - Math.abs((b.s.cP ?? 50) - 50);
     });
-    if (!races.length) { list.innerHTML = `<div class="card skeleton">No races in this view yet.</div>`; return; }
+    if (!races.length) { list.innerHTML = `<div class="card skeleton">${filter === "upsets" ? "No upsets yet. Races appear here once they're called against expectations." : "No races in this view yet."}</div>`; return; }
     list.innerHTML = races.map(({ p, s }) => {
-      const cls = p.chal === "I" ? "i" : "d";
+      const cls = s.chalParty;
       const cW = s.cP ?? 0, rW = s.rP ?? 0;
       const pre = p.kalshi;
       const delta = s.cP != null && pre != null ? s.cP - pre : null;
-      const chalLabel = p.chal === "I" ? "Ind." : "D";
-      return `<article class="card race" aria-label="${esc(p.name)} Senate race">
-        <div class="race-top"><span class="race-name">${esc(p.name)}</span>${badge(s, p)}</div>
-        <div class="cands"><span><b style="color:var(--${p.chal === "I" ? "ind" : "dem"})">${esc(s.cName)}</b> (${chalLabel}) ${pct(s.cP)}</span>
-          <span>${pct(s.rP)} <b style="color:var(--rep)">${esc(s.rName)}</b> (R)</span></div>
+      const chalLabel = s.chalParty === "i" ? "Ind." : "D";
+      const inc = (side) => (s.incSide === side ? ` <span class="inc" title="Incumbent">INC</span>` : "");
+      const lost = (side) => (s.incLost && s.incSide === side ? " lost" : "");
+      const upsetTag = s.upset === "major" ? `<div class="upset-tag">⚡ Major upset · ${s.winner === "r" ? "R" : chalLabel} wins a ${leanText(s.lean)} state</div>`
+        : s.upset ? `<div class="upset-tag">⚡ Upset${s.incLost ? " · incumbent defeated" : ""}</div>` : "";
+      return `<article class="card race${s.upset ? " is-upset" : ""}${s.upset === "major" ? " is-major" : ""}" aria-label="${esc(p.name)} Senate race">
+        ${upsetTag}
+        <div class="race-top"><span class="race-name">${esc(p.name)} <span class="seat seat-${p.hold.toLowerCase()}">${p.hold}-held</span></span>${badge(s)}</div>
+        <div class="cands"><span class="${lost(cls)}"><b style="color:var(--${cls === "i" ? "ind" : "dem"})">${esc(s.cName)}</b>${inc(cls)} (${chalLabel}) ${pct(s.cP)}</span>
+          <span class="${lost("r")}">${pct(s.rP)} <b style="color:var(--rep)">${esc(s.rName)}</b>${inc("r")} (R)</span></div>
         <div class="bar" aria-hidden="true"><span class="${cls}" style="width:${cW}%"></span><span class="r" style="width:${rW}%"></span>
           ${pre != null ? `<i class="pre" style="left:calc(${pre}% - 1px)"></i>` : ""}</div>
         <div class="compare">
-          <span>Pre-election: <strong>Kalshi ${pre != null ? pre + "%" : "—"}</strong></span>
+          <span>${p.inc ? (s.incSide ? "Incumbent running" : `Open seat (${esc(p.inc)} not on ballot)`) : "Open seat"}</span>
+          <span>2024: <strong>${leanText(p.trump24)}</strong></span>
+          ${pre != null ? `<span>Pre-election Kalshi <strong>${pre}%</strong></span>` : ""}
           ${p.ddhq != null ? `<span>DDHQ <strong>${p.ddhq}%</strong></span>` : ""}
           ${p.onpoint != null ? `<span>On Point <strong>${p.onpoint}%</strong></span>` : ""}
           ${p.poll != null ? `<span>Polls <strong>${p.poll >= 0 ? chalLabel : "R"}+${Math.abs(p.poll).toFixed(1)}</strong></span>` : ""}
           ${delta != null ? `<span>Since: <strong class="delta ${delta > 0.5 ? "up" : delta < -0.5 ? "down" : ""}">${sign(delta)} pts</strong></span>` : ""}
-          <span>Polls close ${esc(p.closes)}</span>
+          ${p.closes ? `<span>Polls close ${esc(p.closes)}</span>` : ""}
         </div>
       </article>`;
     }).join("");
+  }
+
+  // ---------- prediction vs. results tracker (5-minute buckets) ----------
+  let TRACK = [];
+  function renderTracker() {
+    const P = PRED.control;
+    const cfg = [
+      { id: "house", el: "#trk-house", total: 435, maj: 218, pre: P.house.ddhqSeats, label: "House" },
+      { id: "senate", el: "#trk-senate", total: 100, maj: 51, pre: P.senate.ddhqSeats, label: "Senate" },
+    ];
+    const seats = (DATA && DATA.seats) || {};
+    cfg.forEach((c) => {
+      const box = $(c.el); if (!box) return;
+      const rows = TRACK.map((r) => ({ t: r.t, ...(r[c.id] || {}) })).filter((r) => r.exp != null || r.d != null);
+      const cur = seats[c.id] || {};
+      const nowD = c.id === "senate" ? cur.totalD : cur.calledD, nowR = c.id === "senate" ? cur.totalR : cur.calledR;
+      const nowExp = cur.expD_market ?? cur.expD_races;
+      const head = `<div class="trk-head">
+          <div><div class="kl">Predicted Dem. seats</div><div class="kv" style="color:var(--dem)">${nowExp != null ? Math.round(nowExp) : "—"}</div><div class="ks">Pre-election DDHQ ${c.pre} · majority ${c.maj}</div></div>
+          <div><div class="kl">${c.id === "senate" ? "Seats locked in (incl. not up)" : "Seats called so far"}</div>
+            <div class="kv"><span style="color:var(--dem)">${nowD ?? "—"}</span> <span class="vs">–</span> <span style="color:var(--rep)">${nowR ?? "—"}</span></div>
+            <div class="ks">${c.id === "senate" ? `${cur.racesCalled ?? 0} of 35 races decided` : cur.calledD == null ? "Call feed unavailable" : `${(cur.calledD || 0) + (cur.calledR || 0) + (cur.calledI || 0)} of 435 called · ${cur.counting ?? 0} counting`}</div></div>
+        </div>`;
+      box.innerHTML = head + trackerChart(rows, c) + trackerTable(rows, c);
+    });
+  }
+
+  function trackerChart(rows, c) {
+    if (rows.length < 2) return `<p class="note" style="margin:8px 0">The 5-minute tracker fills in as results come in.</p>`;
+    const W = 320, H = 150, L = 4, R = 316, T = 8, B = 136;
+    const t0 = new Date(rows[0].t).getTime(), t1 = new Date(rows[rows.length - 1].t).getTime();
+    const X = (t) => L + ((new Date(t).getTime() - t0) / Math.max(1, t1 - t0)) * (R - L);
+    const vals = rows.flatMap((r) => [r.exp, r.d, r.r]).concat([c.maj, c.pre]).filter((v) => v != null);
+    const pad = c.id === "senate" ? 3 : 12;
+    const lo = Math.max(0, Math.floor(Math.min(...vals) - pad)), hi = Math.min(c.total, Math.ceil(Math.max(...vals) + pad));
+    const Y = (v) => B - ((v - lo) / (hi - lo)) * (B - T);
+    const path = (k) => rows.filter((r) => r[k] != null).map((r, i) => `${i ? "L" : "M"}${X(r.t).toFixed(1)},${Y(r[k]).toFixed(1)}`).join("");
+    const step = (k) => { let d = "", prev = null; rows.forEach((r, i) => { if (r[k] == null) return; const x = X(r.t).toFixed(1), y = Y(r[k]).toFixed(1); d += prev == null ? `M${x},${y}` : `H${x}V${y}`; prev = y; }); return d; };
+    const hl = (v, dash, op, lab, right, below) => `<line x1="${L}" x2="${R}" y1="${Y(v)}" y2="${Y(v)}" stroke="currentColor" stroke-dasharray="${dash}" opacity="${op}" vector-effect="non-scaling-stroke"/><text x="${right ? R - 2 : L + 2}" y="${Y(v) + (right || below ? 9 : -3)}" text-anchor="${right ? "end" : "start"}" font-size="8" fill="currentColor" opacity=".65">${lab}</text>`;
+    const f = (t) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return `<svg class="trk-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${c.label}: predicted Democratic seats versus seats called, every 5 minutes">
+        ${hl(c.maj, "3 3", ".35", `Majority ${c.maj}`, false, true)}${hl(c.pre, "1 4", ".5", `DDHQ pre-election ${c.pre}`, true)}
+        <text x="${L + 2}" y="${B + 10}" font-size="8" fill="currentColor" opacity=".55">${lo}</text><text x="${L + 2}" y="${T + 2}" font-size="8" fill="currentColor" opacity=".55">${hi}</text>
+        <path d="${path("exp")}" fill="none" stroke="var(--dem)" stroke-width="2.25" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+        <path d="${step("d")}" fill="none" stroke="var(--dem)" stroke-width="3" opacity=".45" vector-effect="non-scaling-stroke"/>
+        <path d="${step("r")}" fill="none" stroke="var(--rep)" stroke-width="3" opacity=".7" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <div class="legend"><span><i style="background:var(--dem)"></i>Predicted D seats (Kalshi)</span><span><i style="background:var(--dem);opacity:.45"></i>D ${c.id === "senate" ? "locked in" : "called"}</span><span><i style="background:var(--rep);opacity:.7"></i>R ${c.id === "senate" ? "locked in" : "called"}</span><span>${f(rows[0].t)} – ${f(rows[rows.length - 1].t)}</span></div>`;
+  }
+
+  function trackerTable(rows, c) {
+    if (!rows.length) return "";
+    const last = rows.slice(-12).reverse();
+    const f = (t) => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return `<details class="trk-table"><summary>Every 5 minutes (last hour)</summary><table>
+      <thead><tr><th>Time</th><th>Control (D)</th><th>Pred. D seats</th><th>D ${c.id === "senate" ? "locked" : "called"}</th><th>R ${c.id === "senate" ? "locked" : "called"}</th></tr></thead>
+      <tbody>${last.map((r) => `<tr><td>${f(r.t)}</td><td>${pct(r.p)}</td><td>${r.exp != null ? Math.round(r.exp) : "—"}</td><td>${r.d ?? "—"}</td><td>${r.r ?? "—"}</td></tr>`).join("")}</tbody></table></details>`;
+  }
+
+  // ---------- Truth Social ----------
+  function renderTruth() {
+    const t = (DATA && DATA.truth) || {};
+    const posts = t.posts || [];
+    $("#truth").innerHTML = posts.length ? posts.slice(0, 12).map((p) =>
+      `<a class="post" href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">
+        <div class="post-text">${esc(p.text).replace(/\n+/g, "<br>")}</div>
+        <div class="m">${p.time ? timeAgo(p.time) + " · " + new Date(p.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : ""}${p.media ? " · has media" : ""}</div></a>`).join("")
+      : '<div class="skeleton">No posts loaded yet.</div>';
+    $("#truth-src").textContent = t.source ? `Source: ${t.source}. Original posts only; re-posts and media-only posts are hidden.` : "";
   }
 
   // ---------- headlines ----------
@@ -185,6 +285,8 @@
     renderCombo(c.combo);
     renderTrend();
     renderRaces();
+    renderTracker();
+    renderTruth();
     renderNews();
     const upd = DATA && DATA.updated;
     const age = upd ? (Date.now() - new Date(upd).getTime()) / 60000 : Infinity;
@@ -210,6 +312,7 @@
       try { DATA = await getJSON(DATA_BASE + "data.json"); } catch (e2) { console.warn("data", e2); }
     }
     try { HIST = await getJSON(DATA_BASE + "history.json"); } catch (e) { HIST = HIST || []; }
+    try { TRACK = await getJSON(DATA_BASE + "tracker.json"); } catch (e) { TRACK = TRACK || []; }
     renderAll();
   }
 

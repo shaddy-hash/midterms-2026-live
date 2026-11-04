@@ -95,6 +95,31 @@ details{margin-top:8px} summary{cursor:pointer;font-weight:500;color:var(--text-
 @media (prefers-color-scheme: dark){.banner{background:#3a2c0a;color:#f0d08a}}
 .banner.show{display:block}
 .skeleton{color:var(--muted);font-size:14px}
+.inc{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;padding:1px 5px;border-radius:5px;border:1px solid currentColor;color:var(--text-2);vertical-align:1px;margin-left:4px}
+.lost b{text-decoration:line-through;text-decoration-thickness:1.5px}
+.seat{font-size:11px;font-weight:600;color:var(--muted);margin-left:6px}
+.race.is-upset{border:2px solid var(--warn);background:color-mix(in srgb,var(--warn) 7%,var(--surface))}
+.race.is-major{border-color:#e5484d;background:color-mix(in srgb,#e5484d 7%,var(--surface))}
+.upset-tag{font-size:12px;font-weight:700;color:var(--warn);margin-bottom:6px;letter-spacing:.01em}
+.is-major .upset-tag{color:#e5484d}
+.trk-head{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px}
+.trk-head .kl{font-size:12.5px;color:var(--text-2);font-weight:500}
+.trk-head .kv{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.15}
+.trk-head .kv .vs{color:var(--muted);font-weight:400}
+.trk-head .ks{font-size:12px;color:var(--muted)}
+.trk-chart{width:100%;height:170px;display:block;color:var(--text)}
+.trk-table table{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
+.trk-table th,.trk-table td{text-align:right;padding:6px 4px;border-bottom:1px solid var(--border)}
+.trk-table th:first-child,.trk-table td:first-child{text-align:left}
+.trk-table th{font-weight:600;color:var(--muted);font-size:11.5px}
+.post{display:block;text-decoration:none;padding:12px 0;border-bottom:1px solid var(--border)}
+.post:last-child{border-bottom:0}
+.post-text{font-size:15px;line-height:1.45;white-space:normal;overflow-wrap:anywhere}
+.post .m{font-size:12.5px;color:var(--muted);margin-top:6px}
+.xtab{flex:none;border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:0 14px;min-height:36px;font:500 13px Inter,system-ui,sans-serif;color:var(--text-2);cursor:pointer}
+.xtab[data-p="d"][aria-selected="true"]{background:var(--dem);border-color:var(--dem);color:#fff}
+.xtab[data-p="r"][aria-selected="true"]{background:var(--rep);border-color:var(--rep);color:#fff}
+.xopen{display:inline-flex;align-items:center;min-height:44px;font-weight:600;color:var(--dem);text-decoration:none}
 footer{padding:24px 0 40px}
 @media (min-width:640px){ .kpi .value{font-size:40px} }
 </style>
@@ -139,15 +164,48 @@ footer{padding:24px 0 40px}
     </div>
   </section>
 
+  <section aria-labelledby="h-trk">
+    <h2 id="h-trk">Prediction vs. results · every 5 min</h2>
+    <div class="card trk" id="trk-house"><div class="skeleton">Loading…</div></div>
+    <div class="card trk" id="trk-senate" style="margin-top:12px"><div class="skeleton">Loading…</div></div>
+    <p class="note" style="margin:10px 2px 0">Predicted seats = Kalshi seat-count markets, weighted by price. Senate "locked in" adds seats not up this year (D 34, R 31) to races decided. House calls come from the PollCheck results feed (AP / DDHQ calls).</p>
+  </section>
+
   <section aria-labelledby="h-races">
     <h2 id="h-races">Senate races</h2>
+    <p class="note" style="margin:-4px 2px 10px"><span class="inc">INC</span> = incumbent on the ballot. <b>⚡ Upset</b> = winner was the pre-election underdog, beat an incumbent, or flipped the seat against the state's lean. <b>Major upset</b> = won a state that voted the other way by 10+ points in 2024.</p>
     <div class="chips" role="group" aria-label="Filter races">
-      <button class="chip" data-f="key" aria-pressed="true">Key races</button>
-      <button class="chip" data-f="called" aria-pressed="false">Called</button>
-      <button class="chip" data-f="flips" aria-pressed="false">Flips</button>
-      <button class="chip" data-f="all" aria-pressed="false">All</button>
+      <button class="chip" data-f="key" data-label="Key" aria-pressed="true">Key</button>
+      <button class="chip" data-f="upsets" data-label="Upsets" aria-pressed="false">Upsets</button>
+      <button class="chip" data-f="called" data-label="Decided" aria-pressed="false">Decided</button>
+      <button class="chip" data-f="flips" data-label="Flips" aria-pressed="false">Flips</button>
+      <button class="chip" data-f="all" data-label="All" aria-pressed="false">All</button>
     </div>
     <div class="races" id="races"><div class="card skeleton">Loading…</div></div>
+  </section>
+
+  <section aria-labelledby="h-truth">
+    <h2 id="h-truth">Trump on Truth Social</h2>
+    <div class="card"><div class="news" id="truth"><div class="skeleton">Loading…</div></div>
+      <p class="note" id="truth-src" style="margin:8px 0 0"></p></div>
+  </section>
+
+  <section aria-labelledby="h-x">
+    <h2 id="h-x">Party accounts on X</h2>
+    <div class="chips" role="tablist" aria-label="Choose an account" id="xtabs">
+      <button class="xtab" role="tab" data-h="TheDemocrats" data-p="d" aria-selected="true">Democrats</button>
+      <button class="xtab" role="tab" data-h="GOP" data-p="r" aria-selected="false">GOP</button>
+      <button class="xtab" role="tab" data-h="DSCC" data-p="d" aria-selected="false">DSCC</button>
+      <button class="xtab" role="tab" data-h="NRSC" data-p="r" aria-selected="false">NRSC</button>
+      <button class="xtab" role="tab" data-h="dccc" data-p="d" aria-selected="false">DCCC</button>
+      <button class="xtab" role="tab" data-h="NRCC" data-p="r" aria-selected="false">NRCC</button>
+      <button class="xtab" role="tab" data-h="RepJeffries" data-p="d" aria-selected="false">Jeffries</button>
+      <button class="xtab" role="tab" data-h="SpeakerJohnson" data-p="r" aria-selected="false">Speaker Johnson</button>
+      <button class="xtab" role="tab" data-h="SenSchumer" data-p="d" aria-selected="false">Schumer</button>
+      <button class="xtab" role="tab" data-h="SenJohnThune" data-p="r" aria-selected="false">Thune</button>
+    </div>
+    <div class="card" id="xfeed" style="min-height:120px"></div>
+    <p class="note" style="margin:8px 2px 0">Feeds are X's own embedded timeline. X sometimes shows posts only when you're signed in to X in this browser; if it's blank, use the "Open on X" link.</p>
   </section>
 
   <section aria-labelledby="h-news">
@@ -167,6 +225,21 @@ footer{padding:24px 0 40px}
   </footer>
 </main>
 
-<script src="app.js" defer></script>
+<script src="app.js?v=3" defer></script>
+<script>
+(function(){
+  var loaded=false, box=document.getElementById('xfeed');
+  function show(btn){
+    document.querySelectorAll('.xtab').forEach(function(b){b.setAttribute('aria-selected', String(b===btn));});
+    var h=btn.dataset.h, dark=matchMedia('(prefers-color-scheme: dark)').matches;
+    box.innerHTML='<a class="xopen" href="https://x.com/'+h+'" target="_blank" rel="noopener noreferrer">Open @'+h+' on X ↗</a>'+
+      '<a class="twitter-timeline" data-height="560" data-chrome="noheader nofooter transparent" data-dnt="true" data-theme="'+(dark?'dark':'light')+'" href="https://twitter.com/'+h+'">Posts by @'+h+'</a>';
+    if(!loaded){var s=document.createElement('script');s.async=true;s.src='https://platform.twitter.com/widgets.js';document.body.appendChild(s);loaded=true;}
+    else if(window.twttr&&twttr.widgets){twttr.widgets.load(box);}
+  }
+  document.querySelectorAll('.xtab').forEach(function(b){b.addEventListener('click',function(){show(b);});});
+  show(document.querySelector('.xtab'));
+})();
+</script>
 </body>
 </html>
